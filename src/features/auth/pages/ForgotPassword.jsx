@@ -31,36 +31,25 @@ export default function ForgotPassword() {
     setErrors({});
     
     try {
-      if (import.meta.env.VITE_AUTH_MODE === "stub") {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setSuccessMessage("Password reset link sent! Check your email for instructions.");
-        
-        // In stub mode, simulate redirect to reset form
-        setTimeout(() => {
-          navigate("/auth/reset-password?token=demo-token-123");
-        }, 2000);
-      } else {
-        // Real API call
-        const response = await fetch(`${import.meta.env.VITE_API}/auth/password-reset/request`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email }),
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: "Failed to send reset email" }));
-          throw new Error(errorData.error || errorData.message || "Failed to send reset email");
-        }
-        
-        const data = await response.json();
-        setSuccessMessage(data.message || "Password reset link sent! Check your email for instructions.");
-        setTimeout(() => {
-          navigate("/auth/sign-in");
-        }, 3000);
+      // Real API call
+      const response = await fetch(`${import.meta.env.VITE_API}/auth/password-reset/request`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to send reset email" }));
+        throw new Error(errorData.error || errorData.message || "Failed to send reset email");
       }
+      
+      const data = await response.json();
+      setSuccessMessage(data.message || "Password reset link sent! Check your email for instructions.");
+      setTimeout(() => {
+        navigate("/auth/sign-in");
+      }, 3000);
     } catch (error) {
       setErrors({ submit: error.message });
     } finally {

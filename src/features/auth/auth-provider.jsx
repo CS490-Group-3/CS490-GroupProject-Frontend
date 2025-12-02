@@ -3,9 +3,17 @@ import { setAccessToken, setRefreshToken, clearTokens, getAccessToken } from "..
 
 const AuthCtx = createContext(null);
 
-/* ---------- REAL AUTH ---------- */
-function RealAuthProvider({ children }) {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true); // Add loading state
+
+  // Update user data (e.g., after profile update)
+  const updateUser = (updatedUserData) => {
+    setUser((prevUser) => {
+      if (!prevUser) return updatedUserData;
+      return { ...prevUser, ...updatedUserData };
+    });
+  };
 
   const login = async (email, password) => {
     const res = await fetch(`${import.meta.env.VITE_API}/auth/login`, {
@@ -55,10 +63,16 @@ function RealAuthProvider({ children }) {
     setUser(null);
   };
 
+  // Check authentication on mount and when token changes
   useEffect(() => {
+    let cancelled = false;
+    
     (async () => {
       const token = getAccessToken();
-      if (!token) return;
+      if (!token) {
+        setLoading(false);
+        return;
+      }
       
       try {
         const r = await fetch(`${import.meta.env.VITE_API}/auth/me`, {
@@ -66,56 +80,40 @@ function RealAuthProvider({ children }) {
             "Authorization": `Bearer ${token}`
           },
         });
+        
+        if (cancelled) return;
+        
         if (r.ok) {
           const userData = await r.json();
           setUser(userData.user || userData);
         } else {
           // Token invalid, clear it
           clearTokens();
+          setUser(null);
         }
       } catch (error) {
         // Network error or invalid token
-        clearTokens();
+        if (!cancelled) {
+          clearTokens();
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     })();
+    
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
-    <AuthCtx.Provider value={{ user, login, logout }}>
+    <AuthCtx.Provider value={{ user, login, logout, loading, updateUser }}>
       {children}
     </AuthCtx.Provider>
   );
-}
-
-/* ---------- STUB (DEV) ---------- */
-function StubAuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-
-  const login = async (email, _pw, role = "customer") => {
-    await new Promise((r) => setTimeout(r, 200));
-    const userData = { id: 1, role, email };
-    setUser(userData);
-    return userData; // Return user data for role-based redirects
-  };
-  const logout = async () => setUser(null);
-
-  useEffect(() => {
-    const role = new URLSearchParams(location.search).get("demo");
-    if (role && !user) login("demo@example.com", "", role);
-  }, []);
-
-  return (
-    <AuthCtx.Provider value={{ user, login, logout }}>
-      {children}
-    </AuthCtx.Provider>
-  );
-}
-
-/* ---------- SWITCH ---------- */
-export function AuthProvider({ children }) {
-  const mode = import.meta.env.VITE_AUTH_MODE || "real"; // 'stub' or 'real'
-  const Provider = mode === "stub" ? StubAuthProvider : RealAuthProvider;
-  return <Provider>{children}</Provider>;
 }
 
 export const useAuth = () => useContext(AuthCtx);
