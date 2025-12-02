@@ -33,6 +33,11 @@ export default function AppointmentCard({
           <div className="flex items-center gap-2">
             <div className="font-semibold">{salon.name || "Salon"}</div>
             <StatusBadge status={appt.status} />
+            {appt.barber_running_late && (
+              <span className="text-xs border rounded-full px-2 py-0.5 bg-amber-50 text-amber-800 border-amber-200">
+                Barber Running Late
+              </span>
+            )}
           </div>
           <div className="mt-2 grid grid-cols-[20px_1fr] gap-x-2 text-sm text-gray-700">
             <span>📅</span>
