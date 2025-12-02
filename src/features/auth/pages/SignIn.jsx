@@ -3,8 +3,20 @@ import { useAuth } from "../auth-provider.jsx";
 import { useNavigate } from "react-router-dom";
 
 export default function SignIn() {
-  const { login, user } = useAuth();
+  const { login, user, loading } = useAuth();
   const navigate = useNavigate();
+  
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-pink-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
   
   const [formData, setFormData] = useState({
     email: "",
@@ -97,30 +109,6 @@ export default function SignIn() {
     }
   };
 
-  const demo = async (role) => {
-    setIsLoading(true);
-    try {
-      const userData = await login("demo@x.com", "", role);
-      setSuccessMessage(`Logged in as ${role}! Redirecting...`);
-      
-      // Role-based redirect
-      const redirectPaths = {
-        customer: "/browse",
-        owner: "/salon-dashboard",
-        salon_owner: "/salon-dashboard",
-        barber: "/schedule",
-        admin: "/admin/dashboard",
-      };
-
-      setTimeout(() => {
-        navigate(redirectPaths[userData.role] || "/browse");
-      }, 1000);
-    } catch (error) {
-      setErrors({ submit: "Demo login failed" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-pink-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -231,55 +219,6 @@ export default function SignIn() {
               </button>
             </div>
           </form>
-
-          {/* Demo Login Section */}
-          {import.meta.env.VITE_AUTH_MODE === "stub" && (
-            <div className="mt-8">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">Demo Login</span>
-                </div>
-              </div>
-              
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => demo("customer")}
-                  disabled={isLoading}
-                  className="w-full py-2 px-4 border border-gray-200 rounded-xl bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Demo Customer
-                </button>
-                <button
-                  onClick={() => demo("owner")}
-                  disabled={isLoading}
-                  className="w-full py-2 px-4 border border-gray-200 rounded-xl bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Demo Owner
-                </button>
-                <button
-                  onClick={() => demo("barber")}
-                  disabled={isLoading}
-                  className="w-full py-2 px-4 border border-gray-200 rounded-xl bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Demo Barber
-                </button>
-                <button
-                  onClick={() => demo("admin")}
-                  disabled={isLoading}
-                  className="w-full py-2 px-4 border border-gray-200 rounded-xl bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Demo Admin
-                </button>
-              </div>
-              
-              <p className="mt-2 text-center text-xs text-gray-500">
-                Or add <code>?demo=customer</code> to the URL for quick access.
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>

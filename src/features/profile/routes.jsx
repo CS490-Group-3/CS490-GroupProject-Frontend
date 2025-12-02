@@ -6,6 +6,6 @@ const Profile = lazy(() => import("./pages/Profile.jsx"));
 export default [
   {
     path: "/profile",
-    element: <RoleGate allow={["customer"]}><Profile /></RoleGate>,
+    element: <RoleGate allow={["customer", "owner", "salon_owner", "barber", "admin"]}><Profile /></RoleGate>,
   },
 ];

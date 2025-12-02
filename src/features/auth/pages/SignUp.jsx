@@ -82,53 +82,32 @@ export default function SignUp() {
     setErrors({});
     
     try {
-      // In stub mode, simulate registration
-      if (import.meta.env.VITE_AUTH_MODE === "stub") {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setSuccessMessage("Account created successfully! Redirecting...");
-        
-        // Auto-login after successful registration
-        setTimeout(async () => {
-          await login(formData.email, formData.password, formData.accountType);
-          
-          // Role-based redirect
-          const redirectPaths = {
-            customer: "/browse",
-            owner: "/salon-registration",
-            salon_owner: "/salon-registration",
-            barber: "/schedule",
-            admin: "/admin/verify",
-          };
-          navigate(redirectPaths[formData.accountType] || "/browse");
-        }, 2000);
-      } else {
-        // Real API call
-        const response = await fetch(`${import.meta.env.VITE_API}/auth/signup`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: formData.email,
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            password: formData.password,
-            phone: formData.phone || "", // Optional phone field
-            role: formData.accountType === "owner" ? "salon_owner" : formData.accountType
-          }),
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: "Registration failed" }));
-          throw new Error(errorData.error || errorData.message || "Registration failed");
-        }
-        
-        const data = await response.json();
-        setSuccessMessage(data.message || "Account created successfully! Please check your email to verify your account.");
-        setTimeout(() => {
-          navigate("/auth/sign-in");
-        }, 3000);
+      // Real API call
+      const response = await fetch(`${import.meta.env.VITE_API}/auth/signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          password: formData.password,
+          phone: formData.phone || "", // Optional phone field
+          role: formData.accountType === "owner" ? "salon_owner" : formData.accountType
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Registration failed" }));
+        throw new Error(errorData.error || errorData.message || "Registration failed");
       }
+      
+      const data = await response.json();
+      setSuccessMessage(data.message || "Account created successfully! Please check your email to verify your account.");
+      setTimeout(() => {
+        navigate("/auth/sign-in");
+      }, 3000);
     } catch (error) {
       setErrors({ submit: error.message });
     } finally {

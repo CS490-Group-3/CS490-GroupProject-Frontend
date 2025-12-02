@@ -1,11 +1,15 @@
 import { api } from "../../shared/api/client.js";
 
 // Get customer's current points balance and activity
+// NOTE: Loyalty points endpoint not visible in current API docs
+// Using mock data until backend implements it
 export async function getCustomerPoints() {
   if (import.meta.env.VITE_MOCK === "1") {
     return MOCK_CUSTOMER_POINTS;
   }
-  return api("/me/points");
+  // TODO: Backend needs to implement loyalty points API
+  // Falling back to mock data for now
+  return MOCK_CUSTOMER_POINTS;
 }
 
 // Get available loyalty rewards for a specific salon

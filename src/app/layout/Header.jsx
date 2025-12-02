@@ -112,23 +112,31 @@ export default function Header() {
               <NavLink to="/loyalty-program" className={linkClass}>Loyalty Program</NavLink>
               <NavLink to="/retail" className={linkClass}>My Shop</NavLink>
               <NavLink to="/payments" className={linkClass}>Payments</NavLink>
+              <NavLink to="/profile" className={linkClass}>Profile</NavLink>
             </>
           );
         }
         // If verified but setup not complete, only show Setup link
         if (ownerHasVerifiedSalon === true && ownerSetupComplete === false) {
           return (
-            <NavLink to="/salon-setup" className={linkClass}>Complete Setup</NavLink>
+            <>
+              <NavLink to="/salon-setup" className={linkClass}>Complete Setup</NavLink>
+              <NavLink to="/profile" className={linkClass}>Profile</NavLink>
+            </>
           );
         }
         // If not verified or loading, show registration link
         return (
-          <NavLink to="/salon-registration" className={linkClass}>Registration</NavLink>
+          <>
+            <NavLink to="/salon-registration" className={linkClass}>Registration</NavLink>
+            <NavLink to="/profile" className={linkClass}>Profile</NavLink>
+          </>
         );
       case "barber":
         return (
           <>
             <NavLink to="/schedule" className={linkClass}>My Schedule</NavLink>
+            <NavLink to="/profile" className={linkClass}>Profile</NavLink>
           </>
         );
       case "admin":
@@ -138,6 +146,7 @@ export default function Header() {
             <NavLink to="/admin/verify" className={linkClass}>Salon Verification</NavLink>
             <NavLink to="/admin/analytics" className={linkClass}>Analytics</NavLink>
             <NavLink to="/admin/health" className={linkClass}>Platform Health</NavLink>
+            <NavLink to="/profile" className={linkClass}>Profile</NavLink>
           </>
         );
       default:

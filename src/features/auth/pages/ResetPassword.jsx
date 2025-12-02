@@ -62,21 +62,12 @@ export default function ResetPassword() {
     setErrors({});
     
     try {
-      if (import.meta.env.VITE_AUTH_MODE === "stub") {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setSuccessMessage("Password reset successfully! Redirecting to login...");
-        
-        setTimeout(() => {
-          navigate("/auth/sign-in");
-        }, 2000);
-      } else {
-        // Real API call
-        const response = await fetch(`${import.meta.env.VITE_API}/auth/password-reset/confirm`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+      // Real API call
+      const response = await fetch(`${import.meta.env.VITE_API}/auth/password-reset/confirm`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
           body: JSON.stringify({
             access_token: token,
             new_password: formData.password
@@ -88,12 +79,11 @@ export default function ResetPassword() {
           throw new Error(errorData.error || errorData.message || "Failed to reset password");
         }
         
-        const data = await response.json();
-        setSuccessMessage(data.message || "Password reset successfully! Redirecting to login...");
-        setTimeout(() => {
-          navigate("/auth/sign-in");
-        }, 2000);
-      }
+      const data = await response.json();
+      setSuccessMessage(data.message || "Password reset successfully! Redirecting to login...");
+      setTimeout(() => {
+        navigate("/auth/sign-in");
+      }, 2000);
     } catch (error) {
       setErrors({ submit: error.message });
     } finally {
