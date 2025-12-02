@@ -13,6 +13,7 @@ import {
   createUnavailability,
   deleteUnavailability,
   fetchAvailability,
+  notifyRunningLate,
 } from "../api.js";
 import NotificationsPage from "../../notifications/pages/NotificationsPage.jsx";
 
@@ -186,6 +187,7 @@ export default function ProviderDashboard() {
   const [loadingBlocks, setLoadingBlocks] = useState(false);
   const [weeklyAvailability, setWeeklyAvailability] = useState([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [notifyingLate, setNotifyingLate] = useState(null); // appointment ID being notified
 
   const handleDateClick = (dateNumber) => {
     if (dateNumber >= 1 && dateNumber <= 31 && !Number.isNaN(dateNumber)) {
@@ -496,13 +498,25 @@ export default function ProviderDashboard() {
                   {appointment.status.replace("_", " ")}
                 </span>
                 {!isCanceled(appointment) && (
-                  <button
-                    onClick={() => handleEditAppointment(appointment)}
-                    className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-700 rounded text-xs font-medium hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={savingEdit}
-                  >
-                    Manage
-                  </button>
+                  <>
+                    {!isPastAppointment(appointment) && (
+                      <button
+                        onClick={() => handleNotifyRunningLate(appointment.id)}
+                        disabled={notifyingLate === appointment.id || savingEdit}
+                        className="px-3 py-1.5 bg-amber-500 text-white rounded text-xs font-medium hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
+                        title="Notify customer that you're running late"
+                      >
+                        {notifyingLate === appointment.id ? "Sending..." : "Notify: Running Late"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleEditAppointment(appointment)}
+                      className="px-3 py-1.5 bg-gray-200 border border-gray-300 text-gray-700 rounded text-xs font-medium hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={savingEdit}
+                    >
+                      Manage
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -632,6 +646,26 @@ export default function ProviderDashboard() {
           : "Failed to unblock time via backend."
       );
       setTimeout(() => setConflictError(null), 5000);
+    }
+  };
+
+  const handleNotifyRunningLate = async (appointmentId) => {
+    if (!appointmentId) return;
+    setNotifyingLate(appointmentId);
+    setConflictError(null);
+    try {
+      await notifyRunningLate(appointmentId);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (err) {
+      setConflictError(
+        err instanceof Error
+          ? err.message
+          : "Failed to notify customer."
+      );
+      setTimeout(() => setConflictError(null), 5000);
+    } finally {
+      setNotifyingLate(null);
     }
   };
 

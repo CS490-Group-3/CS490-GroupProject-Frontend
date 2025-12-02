@@ -69,12 +69,29 @@ export default function Profile() {
 
   const validateState = (state) => {
     if (!state) return null;
-    if (state.trim().length === 0) {
+    const trimmed = state.trim();
+    if (trimmed.length === 0) {
       return "State cannot be empty";
     }
-    const stateRegex = /^[a-zA-Z\s\-'\.]+$/;
-    if (!stateRegex.test(state)) {
-      return "State can only contain letters, spaces, hyphens, apostrophes, and periods";
+    // Must be exactly 2 characters (US state abbreviation)
+    if (trimmed.length !== 2) {
+      return "State must be a 2-letter US state abbreviation (e.g., CA, NY, TX)";
+    }
+    // Must be uppercase letters only
+    const stateRegex = /^[A-Z]{2}$/;
+    if (!stateRegex.test(trimmed)) {
+      return "State must be 2 uppercase letters (e.g., CA, NY, TX)";
+    }
+    // Validate against list of valid US state abbreviations
+    const validStates = [
+      "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+      "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+      "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+      "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+      "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
+    ];
+    if (!validStates.includes(trimmed)) {
+      return "Please enter a valid 2-letter US state abbreviation";
     }
     return null;
   };
@@ -522,17 +539,21 @@ export default function Profile() {
                   id="state"
                   value={profileForm.state || ""}
                   onChange={(e) => {
-                    const stateValue = e.target.value;
+                    // Convert to uppercase and limit to 2 characters
+                    const stateValue = e.target.value.toUpperCase().slice(0, 2);
                     setProfileForm({ ...profileForm, state: stateValue });
                     updateFieldError("state", stateValue);
                   }}
                   disabled={!isEditingProfile}
-                  maxLength={50}
-                  placeholder="Enter state"
+                  maxLength={2}
+                  placeholder="CA"
                   className={fieldErrors.state ? "border-red-500" : ""}
                 />
                 {fieldErrors.state && (
                   <p className="text-xs text-red-600 mt-1">{fieldErrors.state}</p>
+                )}
+                {!fieldErrors.state && (
+                  <p className="text-xs text-gray-500 mt-1">Enter 2-letter US state abbreviation (e.g., CA, NY, TX)</p>
                 )}
               </div>
             </div>
