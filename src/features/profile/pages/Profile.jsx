@@ -31,12 +31,77 @@ export default function Profile() {
 
   // Form states
   const [profileForm, setProfileForm] = useState({});
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const userRole = user?.role;
   const isCustomer = userRole === "customer";
   const isOwner = userRole === "salon_owner" || userRole === "owner";
   const isBarber = userRole === "barber";
   const isAdmin = userRole === "admin";
+
+  // Validation functions
+  const validateEmail = (email) => {
+    if (!email) return null;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email) ? null : "Please enter a valid email address";
+  };
+
+  const validatePhone = (phone) => {
+    if (!phone) return null;
+    const digitsOnly = phone.replace(/\D/g, "");
+    if (digitsOnly.length !== 10) {
+      return "Phone number must be exactly 10 digits";
+    }
+    return null;
+  };
+
+  const validateCity = (city) => {
+    if (!city) return null;
+    if (city.trim().length === 0) {
+      return "City cannot be empty";
+    }
+    const cityRegex = /^[a-zA-Z\s\-'\.]+$/;
+    if (!cityRegex.test(city)) {
+      return "City can only contain letters, spaces, hyphens, apostrophes, and periods";
+    }
+    return null;
+  };
+
+  const validateState = (state) => {
+    if (!state) return null;
+    if (state.trim().length === 0) {
+      return "State cannot be empty";
+    }
+    const stateRegex = /^[a-zA-Z\s\-'\.]+$/;
+    if (!stateRegex.test(state)) {
+      return "State can only contain letters, spaces, hyphens, apostrophes, and periods";
+    }
+    return null;
+  };
+
+  const updateFieldError = (field, value) => {
+    let error = null;
+    switch (field) {
+      case "email":
+        error = validateEmail(value);
+        break;
+      case "phone":
+        error = validatePhone(value);
+        break;
+      case "city":
+        error = validateCity(value);
+        break;
+      case "state":
+        error = validateState(value);
+        break;
+      default:
+        break;
+    }
+    setFieldErrors((prev) => ({
+      ...prev,
+      [field]: error,
+    }));
+  };
 
   useEffect(() => {
     loadAllData();
@@ -50,11 +115,13 @@ export default function Profile() {
       setProfile(profileData);
       
       // Initialize form with profile data (snake_case from backend)
+      // Strip non-digits from phone number if it exists
+      const phoneValue = profileData?.phone ? profileData.phone.replace(/\D/g, "").slice(0, 10) : "";
       setProfileForm({
         first_name: profileData?.first_name || "",
         last_name: profileData?.last_name || "",
         email: profileData?.email || "",
-        phone: profileData?.phone || "",
+        phone: phoneValue,
         profile_image_url: profileData?.profile_image_url || "",
         date_of_birth: profileData?.date_of_birth || "",
         city: profileData?.city || "",
@@ -84,29 +151,43 @@ export default function Profile() {
     setError(null);
     setSuccessMessage(null);
 
+    // Validate all fields
+    const errors = {};
+    if (profileForm.email) {
+      const emailError = validateEmail(profileForm.email);
+      if (emailError) errors.email = emailError;
+    }
+    if (profileForm.phone) {
+      const phoneError = validatePhone(profileForm.phone);
+      if (phoneError) errors.phone = phoneError;
+    }
+    if (profileForm.city) {
+      const cityError = validateCity(profileForm.city);
+      if (cityError) errors.city = cityError;
+    }
+    if (profileForm.state) {
+      const stateError = validateState(profileForm.state);
+      if (stateError) errors.state = stateError;
+    }
+
     // Frontend validation
     if (profileForm.first_name && profileForm.first_name.length > 100) {
-      setError("First name must be 100 characters or less");
-      setSaving(false);
-      return;
+      errors.first_name = "First name must be 100 characters or less";
     }
     if (profileForm.last_name && profileForm.last_name.length > 100) {
-      setError("Last name must be 100 characters or less");
-      setSaving(false);
-      return;
-    }
-    if (profileForm.phone && profileForm.phone.length > 20) {
-      setError("Phone number must be 20 characters or less");
-      setSaving(false);
-      return;
+      errors.last_name = "Last name must be 100 characters or less";
     }
     if (profileForm.city && profileForm.city.length > 100) {
-      setError("City must be 100 characters or less");
-      setSaving(false);
-      return;
+      errors.city = "City must be 100 characters or less";
     }
     if (profileForm.state && profileForm.state.length > 50) {
-      setError("State must be 50 characters or less");
+      errors.state = "State must be 50 characters or less";
+    }
+
+    // If there are validation errors, show them and stop
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError("Please fix the validation errors below");
       setSaving(false);
       return;
     }
@@ -144,6 +225,7 @@ export default function Profile() {
       }
       
       setIsEditingProfile(false);
+      setFieldErrors({});
       setSuccessMessage("Profile updated successfully!");
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
@@ -176,11 +258,13 @@ export default function Profile() {
 
   function handleCancelProfile() {
     // Reset form to original profile data
+    // Strip non-digits from phone number if it exists
+    const phoneValue = profile?.phone ? profile.phone.replace(/\D/g, "").slice(0, 10) : "";
     setProfileForm({
       first_name: profile?.first_name || "",
       last_name: profile?.last_name || "",
       email: profile?.email || "",
-      phone: profile?.phone || "",
+      phone: phoneValue,
       profile_image_url: profile?.profile_image_url || "",
       date_of_birth: profile?.date_of_birth || "",
       city: profile?.city || "",
@@ -190,6 +274,7 @@ export default function Profile() {
     });
     setIsEditingProfile(false);
     setError(null);
+    setFieldErrors({});
   }
 
 
@@ -245,7 +330,11 @@ export default function Profile() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-semibold">Personal Information</h2>
               {!isEditingProfile ? (
-                <Button onClick={() => setIsEditingProfile(true)}>Edit Profile</Button>
+                <Button onClick={() => {
+                  setIsEditingProfile(true);
+                  setFieldErrors({});
+                  setError(null);
+                }}>Edit Profile</Button>
               ) : (
                 <div className="space-x-2">
                   <Button onClick={handleSaveProfile} disabled={saving}>
@@ -319,9 +408,14 @@ export default function Profile() {
                   type="email"
                   value={profileForm.email || ""}
                   disabled
-                  className="bg-gray-50"
+                  className={`bg-gray-50 ${fieldErrors.email ? "border-red-500" : ""}`}
                 />
-                <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+                {fieldErrors.email && (
+                  <p className="text-xs text-red-600 mt-1">{fieldErrors.email}</p>
+                )}
+                {!fieldErrors.email && (
+                  <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+                )}
               </div>
 
               <div>
@@ -330,11 +424,25 @@ export default function Profile() {
                   id="phone"
                   type="tel"
                   value={profileForm.phone || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                  onChange={(e) => {
+                    // Strip all non-digits
+                    const digitsOnly = e.target.value.replace(/\D/g, "");
+                    // Limit to 10 digits
+                    const phoneValue = digitsOnly.slice(0, 10);
+                    setProfileForm({ ...profileForm, phone: phoneValue });
+                    updateFieldError("phone", phoneValue);
+                  }}
                   disabled={!isEditingProfile}
-                  maxLength={20}
-                  placeholder="Enter phone number"
+                  maxLength={10}
+                  placeholder="1234567890"
+                  className={fieldErrors.phone ? "border-red-500" : ""}
                 />
+                {fieldErrors.phone && (
+                  <p className="text-xs text-red-600 mt-1">{fieldErrors.phone}</p>
+                )}
+                {!fieldErrors.phone && (
+                  <p className="text-xs text-gray-500 mt-1">Enter 10 digits (no dashes or spaces)</p>
+                )}
               </div>
 
               <div>
@@ -393,11 +501,19 @@ export default function Profile() {
                 <Input
                   id="city"
                   value={profileForm.city || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
+                  onChange={(e) => {
+                    const cityValue = e.target.value;
+                    setProfileForm({ ...profileForm, city: cityValue });
+                    updateFieldError("city", cityValue);
+                  }}
                   disabled={!isEditingProfile}
                   maxLength={100}
                   placeholder="Enter city"
+                  className={fieldErrors.city ? "border-red-500" : ""}
                 />
+                {fieldErrors.city && (
+                  <p className="text-xs text-red-600 mt-1">{fieldErrors.city}</p>
+                )}
               </div>
 
               <div>
@@ -405,11 +521,19 @@ export default function Profile() {
                 <Input
                   id="state"
                   value={profileForm.state || ""}
-                  onChange={(e) => setProfileForm({ ...profileForm, state: e.target.value })}
+                  onChange={(e) => {
+                    const stateValue = e.target.value;
+                    setProfileForm({ ...profileForm, state: stateValue });
+                    updateFieldError("state", stateValue);
+                  }}
                   disabled={!isEditingProfile}
                   maxLength={50}
                   placeholder="Enter state"
+                  className={fieldErrors.state ? "border-red-500" : ""}
                 />
+                {fieldErrors.state && (
+                  <p className="text-xs text-red-600 mt-1">{fieldErrors.state}</p>
+                )}
               </div>
             </div>
 
