@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/auth-provider.jsx";
-import salonicaLogo from "../../../assets/salonica.png";
+import salonicaLogo from "../../../assets/Salonicawhite.png";
 
 export default function Home() {
   const navigate = useNavigate();
