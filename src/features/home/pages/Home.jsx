@@ -6,7 +6,6 @@ import salonicaLogo from "../../../assets/salonica.png";
 export default function Home() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
-  const [searchQuery, setSearchQuery] = useState("");
 
   // Show loading while checking auth
   if (loading) {
@@ -34,15 +33,6 @@ export default function Home() {
       navigate(destination, { replace: true });
     }
   }, [user, navigate]);
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (!user) {
-      navigate("/auth/sign-in");
-    } else {
-      navigate(`/browse?q=${encodeURIComponent(searchQuery)}`);
-    }
-  };
 
   const handleBrowseClick = () => {
     if (!user) {
@@ -99,27 +89,8 @@ export default function Home() {
             </h1>
             
             <p className="text-xl md:text-2xl text-purple-50 mb-10 max-w-3xl mx-auto font-medium">
-              Book appointments at top-rated salons, manage your schedule, and earn rewards—all in one place.
+              Book appointments at top-rated salons, manage your schedule, and earn rewards all in one place!
             </p>
-
-            {/* Search Bar */}
-            <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-8 relative z-10">
-              <div className="flex gap-3 shadow-2xl">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for salons, services, or locations..."
-                  className="flex-1 px-6 py-4 rounded-l-xl border-0 focus:outline-none focus:ring-2 focus:ring-white text-lg"
-                />
-                <button
-                  type="submit"
-                  className="px-8 py-4 bg-white text-purple-600 font-bold rounded-r-xl hover:bg-gray-50 transition-all relative z-10"
-                >
-                  Search
-                </button>
-              </div>
-            </form>
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
