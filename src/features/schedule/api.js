@@ -98,3 +98,13 @@ export async function deleteUnavailability(blockId, params = {}) {
     method: "DELETE",
   });
 }
+
+// Notify customer that barber is running late
+export async function notifyRunningLate(appointmentId) {
+  if (!appointmentId) {
+    throw new Error("Appointment ID is required to notify customer.");
+  }
+  return api(`${APPOINTMENTS_BASE}/${appointmentId}/running-late`, {
+    method: "POST",
+  });
+}
