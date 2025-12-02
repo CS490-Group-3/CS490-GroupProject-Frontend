@@ -213,13 +213,28 @@ export default function ProviderDashboard() {
   const loadAppointments = useCallback(async () => {
     setLoadingAppointments(true);
     try {
-      const response = await fetchAppointments();
-      const rows = Array.isArray(response?.appointments)
-        ? response.appointments
-        : Array.isArray(response)
-        ? response
-        : [];
-      setAppointments(rows.map(normalizeAppointment));
+      // For provider schedule we want full history (past + upcoming) for this barber.
+      // Paginate through /appointments until we exhaust all pages.
+      const all = [];
+      const pageSize = 100;
+      let page = 1;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const response = await fetchAppointments({
+          when: "all",
+          limit: pageSize,
+          page,
+        });
+        const rows = Array.isArray(response?.appointments)
+          ? response.appointments
+          : Array.isArray(response)
+          ? response
+          : [];
+        all.push(...rows);
+        if (rows.length < pageSize) break;
+        page += 1;
+      }
+      setAppointments(all.map(normalizeAppointment));
     } catch (err) {
       console.error("Failed to load appointments", err);
       setAppointmentsError(
@@ -501,15 +516,24 @@ export default function ProviderDashboard() {
     const label = typeof slotOrLabel === "string" ? slotOrLabel : slotOrLabel.label;
     let start;
     let end;
+    let windowStart = null;
+    let windowEnd = null;
     if (slotOrLabel && typeof slotOrLabel === "object" && slotOrLabel.start) {
       start = slotOrLabel.start;
+      windowStart = slotOrLabel.windowStart || null;
+      windowEnd = slotOrLabel.windowEnd || null;
       const dur = slotOrLabel.duration || durationMinutes;
-      end = slotOrLabel.end ? slotOrLabel.end : new Date(start.getTime() + dur * 60 * 1000);
+      // Always compute end based on the intended duration, not the precomputed 15-min slot
+      end = new Date(start.getTime() + dur * 60 * 1000);
     } else {
       const range = slotToRange(selectedDate, label, durationMinutes);
       start = range.start;
       end = range.end;
     }
+
+    // If the requested interval would extend outside the availability window, treat as unavailable
+    if (windowStart && start < windowStart) return "unavailable";
+    if (windowEnd && end > windowEnd) return "unavailable";
 
     const hasAppointment = todayAppointments.find((a) => {
       const status = (a.status || "").toLowerCase();
@@ -537,28 +561,33 @@ export default function ProviderDashboard() {
   const handleBlockSlot = async () => {
     if (!selectedSlot) return;
 
-    const hasExistingAppointment = todayAppointments.find(
-      (a) => a.displayTime === selectedSlot.label
-    );
-
-    if (hasExistingAppointment) {
-      setConflictError(
-        `Cannot block ${selectedSlot} - Appointment already scheduled at this time`
-      );
-      setTimeout(() => setConflictError(null), 5000);
-      return;
-    }
-
     try {
       const start = selectedSlot.start;
       const end = new Date(start.getTime() + blockDuration * 60 * 1000);
 
-      // ensure block fits within availability window
-      const fitsWindow =
-        start >= (selectedSlot.windowStart || start) &&
-        end <= (selectedSlot.windowEnd || end);
-      if (!fitsWindow) {
-        setConflictError("Selected block extends past your availability window.");
+      // ensure block fits within availability window and doesn't overlap appointments/blocks
+      const status = getSlotStatus(
+        { ...selectedSlot, start, windowStart: selectedSlot.windowStart, windowEnd: selectedSlot.windowEnd },
+        blockDuration
+      );
+      if (status === "unavailable") {
+        setConflictError(
+          `Cannot block ${blockDuration}-minute window starting at ${selectedSlot.label} because it extends past your availability.`
+        );
+        setTimeout(() => setConflictError(null), 5000);
+        return;
+      }
+      if (status === "booked") {
+        setConflictError(
+          `Cannot block ${blockDuration}-minute window starting at ${selectedSlot.label} because it overlaps an existing appointment.`
+        );
+        setTimeout(() => setConflictError(null), 5000);
+        return;
+      }
+      if (status === "blocked") {
+        setConflictError(
+          `Cannot block ${blockDuration}-minute window starting at ${selectedSlot.label} because it overlaps another blocked time.`
+        );
         setTimeout(() => setConflictError(null), 5000);
         return;
       }

@@ -53,7 +53,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-pink-100">
       {/* Hero Section */}
       <section className="relative bg-gradient-to-br from-purple-600 via-pink-500 to-purple-700 overflow-hidden">
         <div className="absolute inset-0 bg-black/10"></div>
@@ -123,12 +123,6 @@ export default function Home() {
                 className="px-8 py-4 bg-white text-purple-600 font-bold rounded-xl hover:bg-gray-50 transition-all shadow-2xl hover:shadow-3xl text-lg"
               >
                 Get Started Free
-              </button>
-              <button
-                onClick={handleBrowseClick}
-                className="px-8 py-4 bg-white/20 backdrop-blur-sm text-white font-bold rounded-xl hover:bg-white/30 transition-all text-lg"
-              >
-                {user ? "Browse Salons" : "Browse as Guest"}
               </button>
             </div>
           </div>

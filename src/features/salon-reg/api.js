@@ -304,3 +304,41 @@ export async function setEmployeeAvailability(salonId, barberId, availability, m
     body: JSON.stringify({ availability }),
   });
 }
+
+// Submit appeal for rejected salon
+export async function submitSalonAppeal(salonId, {
+  name,
+  address,
+  city,
+  state,
+  zip_code,
+  phone,
+  email,
+  description,
+  timezone,
+  logoFile,
+  licenseFile,
+}) {
+  const formData = new FormData();
+  if (name) formData.append("name", name);
+  if (address) formData.append("address", address);
+  if (city) formData.append("city", city);
+  if (state) formData.append("state", state);
+  if (zip_code) formData.append("zip_code", zip_code);
+  if (phone) formData.append("phone", phone);
+  if (email) formData.append("email", email);
+  if (description) formData.append("description", description);
+  if (timezone) formData.append("timezone", timezone);
+  if (logoFile) formData.append("logo", logoFile);
+  if (licenseFile) formData.append("license", licenseFile);
+
+  return api(`/salons/${salonId}/appeal`, {
+    method: "PUT",
+    body: formData,
+  });
+}
+
+// Get salon status history (to get rejection reason from notifications)
+export async function getSalonStatusHistory(salonId) {
+  return api(`/salons/${salonId}/status-history`);
+}

@@ -5,8 +5,7 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard.jsx"));
 const PlatformHealth = lazy(() => import("./pages/PlatformHealth.jsx"));
 const AdminVerify = lazy(() => import("./pages/AdminVerify.jsx"));
 const AdminAnalytics = lazy(() => import("./pages/AdminAnalytics.jsx"));
-const CustomerInsights = lazy(() => import("./pages/CustomerInsights.jsx"));
-const PlatformMonitoring = lazy(() => import("./pages/PlatformMonitoring.jsx"));
+const AuditLogs = lazy(() => import("./pages/AuditLogs.jsx"));
 
 export default [
   { 
@@ -26,11 +25,7 @@ export default [
     element: <RoleGate allow={["admin"]}><PlatformHealth /></RoleGate> 
   },
   { 
-    path: "/admin/customer-insights", 
-    element: <RoleGate allow={["admin"]}><CustomerInsights /></RoleGate> 
-  },
-  { 
-    path: "/admin/platform-monitoring", 
-    element: <RoleGate allow={["admin"]}><PlatformMonitoring /></RoleGate> 
+    path: "/admin/audit-logs", 
+    element: <RoleGate allow={["admin"]}><AuditLogs /></RoleGate> 
   },
 ];
