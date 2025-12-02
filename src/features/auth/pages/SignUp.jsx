@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../auth-provider.jsx";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function SignUp() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
+  // Check URL param for account type (default to "owner" if type=owner, otherwise "customer")
+  const defaultAccountType = searchParams.get("type") === "owner" ? "owner" : "customer";
   
   const [formData, setFormData] = useState({
     firstName: "",
@@ -12,18 +16,25 @@ export default function SignUp() {
     email: "",
     password: "",
     confirmPassword: "",
-    accountType: "customer"
+    accountType: defaultAccountType
   });
   
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
+  // Update account type when URL param changes
+  useEffect(() => {
+    const typeParam = searchParams.get("type");
+    if (typeParam === "owner") {
+      setFormData(prev => ({ ...prev, accountType: "owner" }));
+    }
+  }, [searchParams]);
+
   const accountTypes = [
     { value: "customer", label: "Customer" },
     { value: "owner", label: "Salon Owner" },
-    { value: "barber", label: "Barber" },
-    { value: "admin", label: "Admin" }
+    { value: "barber", label: "Barber" }
   ];
 
   const validateForm = () => {
