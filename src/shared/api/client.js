@@ -47,27 +47,71 @@ export async function api(path, opts = {}) {
     body = JSON.stringify(body);
   }
   
-  const res = await fetch(import.meta.env.VITE_API + path, {
-    ...opts,
-    headers,
-    body,
-  });
+  const maxRetries = 3;
+  const retryDelay = 1000; // 1 second
   
-  if (!res.ok) {
-    const errorText = await res.text();
-    let errorMessage = errorText;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const errorJson = JSON.parse(errorText);
-      if (errorJson.message) {
-        errorMessage = errorJson.message;
-      } else if (errorJson.error) {
-        errorMessage = errorJson.error;
+      const res = await fetch(import.meta.env.VITE_API + path, {
+        ...opts,
+        headers,
+        body,
+      });
+      
+      if (!res.ok) {
+        // If it's a 401/403, don't retry
+        if (res.status === 401 || res.status === 403) {
+          const errorText = await res.text();
+          let errorMessage = errorText;
+          try {
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.message) {
+              errorMessage = errorJson.message;
+            } else if (errorJson.error) {
+              errorMessage = errorJson.error;
+            }
+          } catch {
+            // If not JSON, use the text as-is
+          }
+          throw new Error(errorMessage);
+        }
+        
+        // For other errors, retry if not last attempt
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)));
+          continue;
+        }
+        
+        // Last attempt - parse error and throw
+        const errorText = await res.text();
+        let errorMessage = errorText;
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.message) {
+            errorMessage = errorJson.message;
+          } else if (errorJson.error) {
+            errorMessage = errorJson.error;
+          }
+        } catch {
+          // If not JSON, use the text as-is
+        }
+        throw new Error(errorMessage);
       }
-    } catch {
-      // If not JSON, use the text as-is
+      
+      return res.json();
+    } catch (error) {
+      // If it's a network error or server disconnected, retry
+      if (attempt < maxRetries - 1 && (
+        error.message.includes("disconnected") ||
+        error.message.includes("NetworkError") ||
+        error.message.includes("Failed to fetch")
+      )) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)));
+        continue;
+      }
+      
+      // If it's the last attempt or not a retryable error, throw
+      throw error;
     }
-    throw new Error(errorMessage);
   }
-  
-  return res.json();
 }

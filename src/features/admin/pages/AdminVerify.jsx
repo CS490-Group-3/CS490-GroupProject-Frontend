@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../shared/ui/card';
-import { Button } from '../../../shared/ui/button';
-import { Badge } from '../../../shared/ui/badge';
-import { Textarea } from '../../../shared/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../shared/ui/tabs';
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../shared/ui/card";
+import { Button } from "../../../shared/ui/button";
+import { Badge } from "../../../shared/ui/badge";
+import { Textarea } from "../../../shared/ui/textarea";
+import { Label } from "../../../shared/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -11,361 +11,353 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '../../../shared/ui/dialog';
-import { Alert, AlertDescription } from '../../../shared/ui/alert';
-import { CheckCircle, XCircle, Clock, FileText, MapPin, Phone } from 'lucide-react';
-import { ImageWithFallback } from '../../../shared/ui/ImageWithFallback';
-import { 
-  getSalonApplications, 
-  approveSalonApplication, 
-  rejectSalonApplication 
-} from '../api.js';
+} from "../../../shared/ui/dialog";
+import { Alert, AlertDescription } from "../../../shared/ui/alert";
+import { CheckCircle, XCircle, Clock, FileText, MapPin, Phone, Mail, Building2, AlertCircle } from "lucide-react";
+import { ImageWithFallback } from "../../../shared/ui/ImageWithFallback";
+import { getPendingSalons, approveSalon, rejectSalon, getSalonStatusHistory } from "../api.js";
 
 export default function AdminVerify() {
   const [pendingSalons, setPendingSalons] = useState([]);
-  const [approvedSalons, setApprovedSalons] = useState([]);
-  const [rejectedSalons, setRejectedSalons] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedSalon, setSelectedSalon] = useState(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [actionSuccess, setActionSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    loadSalonApplications();
+    loadPendingSalons();
   }, []);
 
-  const loadSalonApplications = async () => {
+  const loadPendingSalons = async () => {
     try {
-      const applications = await getSalonApplications('all');
-      
-      setPendingSalons(applications.filter(app => app.status === 'pending'));
-      setApprovedSalons(applications.filter(app => app.status === 'approved'));
-      setRejectedSalons(applications.filter(app => app.status === 'rejected'));
+      setLoading(true);
+      setErrorMessage("");
+      const salons = await getPendingSalons();
+      setPendingSalons(salons || []);
     } catch (error) {
-      console.error('Failed to load salon applications:', error);
+      console.error("Failed to load pending salons:", error);
+      setErrorMessage(error.error || "Failed to load pending salon applications");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleApprove = async () => {
     if (!selectedSalon) return;
-    
-    setLoading(true);
+
+    setActionLoading(true);
+    setErrorMessage("");
     try {
-      const result = await approveSalonApplication(selectedSalon.id);
-      
-      if (result.success) {
-        setPendingSalons(pendingSalons.filter((s) => s.id !== selectedSalon.id));
-        setApprovedSalons([...approvedSalons, { ...selectedSalon, status: 'approved' }]);
-        setShowApproveDialog(false);
-        setSelectedSalon(null);
-        setActionSuccess(`${selectedSalon.name} has been approved and notified via email.`);
-        setTimeout(() => setActionSuccess(''), 5000);
-      }
+      await approveSalon(selectedSalon.id);
+      setSuccessMessage(`${selectedSalon.name} has been approved successfully.`);
+      setShowApproveDialog(false);
+      setSelectedSalon(null);
+      await loadPendingSalons();
+      setTimeout(() => setSuccessMessage(""), 5000);
     } catch (error) {
-      console.error('Failed to approve salon:', error);
+      console.error("Failed to approve salon:", error);
+      setErrorMessage(error.error || "Failed to approve salon");
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
   const handleReject = async () => {
-    if (!selectedSalon || !rejectionReason) return;
-    
-    setLoading(true);
+    if (!selectedSalon || !rejectionReason.trim()) return;
+
+    setActionLoading(true);
+    setErrorMessage("");
     try {
-      const result = await rejectSalonApplication(selectedSalon.id, rejectionReason);
-      
-      if (result.success) {
-        setPendingSalons(pendingSalons.filter((s) => s.id !== selectedSalon.id));
-        setRejectedSalons([
-          ...rejectedSalons,
-          { ...selectedSalon, status: 'rejected', rejectionReason },
-        ]);
-        setShowRejectDialog(false);
-        setSelectedSalon(null);
-        setRejectionReason('');
-        setActionSuccess(`${selectedSalon.name} has been rejected and notified via email.`);
-        setTimeout(() => setActionSuccess(''), 5000);
-      }
+      await rejectSalon(selectedSalon.id, rejectionReason.trim());
+      setSuccessMessage(`${selectedSalon.name} has been rejected. The owner has been notified.`);
+      setShowRejectDialog(false);
+      setSelectedSalon(null);
+      setRejectionReason("");
+      await loadPendingSalons();
+      setTimeout(() => setSuccessMessage(""), 5000);
     } catch (error) {
-      console.error('Failed to reject salon:', error);
+      console.error("Failed to reject salon:", error);
+      setErrorMessage(error.error || "Failed to reject salon");
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
-  const SalonCard = ({ salon, showActions }) => (
-    <Card>
-      <CardHeader>
-        <div className="flex gap-4">
-          <ImageWithFallback
-            src={salon.image}
-            alt={salon.name}
-            className="w-24 h-24 object-cover rounded-lg"
-          />
-          <div className="flex-1">
-            <div className="flex justify-between items-start">
-              <CardTitle>{salon.name}</CardTitle>
-              {salon.status === 'pending' && (
-                <Badge variant="secondary">
-                  <Clock className="h-3 w-3 mr-1" />
-                  Pending
-                </Badge>
-              )}
-              {salon.status === 'approved' && (
-                <Badge>
-                  <CheckCircle className="h-3 w-3 mr-1" />
-                  Approved
-                </Badge>
-              )}
-              {salon.status === 'rejected' && (
-                <Badge variant="destructive">
-                  <XCircle className="h-3 w-3 mr-1" />
-                  Rejected
-                </Badge>
-              )}
-            </div>
-            <div className="mt-2 space-y-1">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-3 w-3" />
-                <span>{salon.address}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Phone className="h-3 w-3" />
-                <span>{salon.phone}</span>
-              </div>
-            </div>
+  const openApproveDialog = (salon) => {
+    setSelectedSalon(salon);
+    setShowApproveDialog(true);
+    setErrorMessage("");
+  };
+
+  const openRejectDialog = (salon) => {
+    setSelectedSalon(salon);
+    setShowRejectDialog(true);
+    setRejectionReason("");
+    setErrorMessage("");
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <Clock className="h-8 w-8 animate-spin mx-auto mb-4 text-indigo-600" />
+            <p className="text-gray-600">Loading pending applications...</p>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-sm text-gray-700">{salon.description}</p>
-
-        {salon.status === 'rejected' && salon.rejectionReason && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              <strong>Rejection reason:</strong> {salon.rejectionReason}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="p-3 bg-gray-50 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <FileText className="h-4 w-4 text-gray-600" />
-            <span className="text-sm">Business License</span>
-          </div>
-          <Button variant="outline" size="sm">
-            View Document
-          </Button>
-        </div>
-
-        {showActions && (
-          <div className="flex gap-2 pt-2">
-            <Button
-              className="flex-1"
-              onClick={() => {
-                setSelectedSalon(salon);
-                setShowApproveDialog(true);
-              }}
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Approve
-            </Button>
-            <Button
-              variant="destructive"
-              className="flex-1"
-              onClick={() => {
-                setSelectedSalon(salon);
-                setShowRejectDialog(true);
-              }}
-            >
-              <XCircle className="h-4 w-4 mr-2" />
-              Reject
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {actionSuccess && (
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Salon Verification</h1>
+        <p className="text-gray-600 mt-2">Review and approve pending salon applications</p>
+      </div>
+
+      {successMessage && (
         <Alert className="bg-green-50 border-green-200">
           <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-600">{actionSuccess}</AlertDescription>
+          <AlertDescription className="text-green-800">{successMessage}</AlertDescription>
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Salon Verification Center</CardTitle>
-          <CardDescription>
-            Review and approve salon applications to ensure quality standards
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="pending">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="pending">
-                Pending Review ({pendingSalons.length})
-              </TabsTrigger>
-              <TabsTrigger value="approved">
-                Approved ({approvedSalons.length})
-              </TabsTrigger>
-              <TabsTrigger value="rejected">
-                Rejected ({rejectedSalons.length})
-              </TabsTrigger>
-            </TabsList>
+      {errorMessage && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      )}
 
-            <TabsContent value="pending" className="space-y-4 mt-4">
-              {pendingSalons.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <Clock className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                  <p>No pending applications</p>
+      {pendingSalons.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <CheckCircle className="h-16 w-16 text-gray-400 mb-4" />
+            <p className="text-lg font-semibold text-gray-700">No pending applications</p>
+            <p className="text-sm text-gray-500 mt-2">All salon applications have been reviewed.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-6">
+          {pendingSalons.map((salon) => (
+            <Card key={salon.id} className="overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
+                <div className="flex items-start justify-between">
+                  <div className="flex gap-4 flex-1">
+                    <ImageWithFallback
+                      src={salon.logo_url}
+                      alt={salon.name}
+                      className="w-24 h-24 object-cover rounded-lg border-2 border-white shadow-sm"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <CardTitle className="text-2xl">{salon.name}</CardTitle>
+                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                          <Clock className="h-3 w-3 mr-1" />
+                          Pending Review
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-base mt-1">{salon.description}</CardDescription>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                pendingSalons.map((salon) => (
-                  <SalonCard key={salon.id} salon={salon} showActions={true} />
-                ))
-              )}
-            </TabsContent>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                        <Building2 className="h-4 w-4" />
+                        Business Information
+                      </h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-start gap-2">
+                          <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="font-medium text-gray-900">{salon.address}</p>
+                            {salon.city && salon.state && (
+                              <p className="text-gray-600">
+                                {salon.city}, {salon.state} {salon.zip_code || ""}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {salon.phone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-4 w-4 text-gray-400" />
+                            <span className="text-gray-700">{salon.phone}</span>
+                          </div>
+                        )}
+                        {salon.email && (
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-4 w-4 text-gray-400" />
+                            <span className="text-gray-700">{salon.email}</span>
+                          </div>
+                        )}
+                        {salon.timezone && (
+                          <div className="text-gray-600">
+                            <span className="font-medium">Timezone:</span> {salon.timezone}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-            <TabsContent value="approved" className="space-y-4 mt-4">
-              {approvedSalons.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <CheckCircle className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                  <p>No approved salons</p>
+                    {salon.license_url && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          Business License
+                        </h3>
+                        <a
+                          href={salon.license_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                        >
+                          <FileText className="h-4 w-4" />
+                          View License Document
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Application Details</h3>
+                      <div className="space-y-2 text-sm text-gray-600">
+                        <div>
+                          <span className="font-medium">Status:</span>{" "}
+                          <Badge variant="outline" className="ml-2">
+                            {salon.status}
+                          </Badge>
+                        </div>
+                        {salon.created_at && (
+                          <div>
+                            <span className="font-medium">Submitted:</span>{" "}
+                            {new Date(salon.created_at).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                approvedSalons.map((salon) => (
-                  <SalonCard key={salon.id} salon={salon} showActions={false} />
-                ))
-              )}
-            </TabsContent>
 
-            <TabsContent value="rejected" className="space-y-4 mt-4">
-              {rejectedSalons.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <XCircle className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                  <p>No rejected salons</p>
+                <div className="flex gap-3 mt-6 pt-6 border-t">
+                  <Button
+                    onClick={() => openApproveDialog(salon)}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Approve Application
+                  </Button>
+                  <Button
+                    onClick={() => openRejectDialog(salon)}
+                    variant="destructive"
+                    className="flex-1"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Reject Application
+                  </Button>
                 </div>
-              ) : (
-                rejectedSalons.map((salon) => (
-                  <SalonCard key={salon.id} salon={salon} showActions={false} />
-                ))
-              )}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Verification Guidelines</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3 text-sm">
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-              <div>
-                <p>Verify business license is valid and current</p>
-                <p className="text-xs text-gray-500">Check expiration date and jurisdiction</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-              <div>
-                <p>Confirm business address matches license</p>
-                <p className="text-xs text-gray-500">
-                  Use Google Maps to verify location exists
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-              <div>
-                <p>Check for any red flags or inconsistencies</p>
-                <p className="text-xs text-gray-500">
-                  Look for professional presentation and completeness
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-              <div>
-                <p>Verify contact information is reachable</p>
-                <p className="text-xs text-gray-500">Phone number should be valid format</p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
+      {/* Approve Dialog */}
       <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Approve Salon Application</DialogTitle>
             <DialogDescription>
-              Confirm that you want to approve <strong>{selectedSalon?.name}</strong>
+              Are you sure you want to approve <strong>{selectedSalon?.name}</strong>? The salon owner will be
+              notified and can immediately start accepting bookings.
             </DialogDescription>
           </DialogHeader>
           <Alert>
             <AlertDescription>
-              The salon owner will be notified via email and can immediately start accepting
-              bookings on the platform.
+              Please verify that the business license is valid and all information is accurate before approving.
             </AlertDescription>
           </Alert>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowApproveDialog(false)}>
+            <Button variant="outline" onClick={() => setShowApproveDialog(false)} disabled={actionLoading}>
               Cancel
             </Button>
-            <Button onClick={handleApprove} disabled={loading}>
-              <CheckCircle className="h-4 w-4 mr-2" />
-              {loading ? 'Approving...' : 'Approve Salon'}
+            <Button onClick={handleApprove} disabled={actionLoading} className="bg-green-600 hover:bg-green-700">
+              {actionLoading ? (
+                <>
+                  <Clock className="h-4 w-4 mr-2 animate-spin" />
+                  Approving...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Approve Salon
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Reject Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reject Salon Application</DialogTitle>
             <DialogDescription>
-              Provide a reason for rejecting <strong>{selectedSalon?.name}</strong>
+              Provide a reason for rejecting <strong>{selectedSalon?.name}</strong>. The salon owner will receive
+              this message and can resubmit their application after addressing the issues.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm mb-2 block">Rejection Reason *</label>
+              <Label htmlFor="rejection-reason">Rejection Reason *</Label>
               <Textarea
-                placeholder="Explain why this application is being rejected..."
+                id="rejection-reason"
+                placeholder="Explain why this application is being rejected (e.g., Invalid business license, incomplete information, etc.)..."
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 rows={4}
+                className="mt-2"
               />
             </div>
             <Alert>
               <AlertDescription>
-                The salon owner will receive this message and can resubmit their application after
-                addressing the issues.
+                This reason will be sent to the salon owner via notification and email.
               </AlertDescription>
             </Alert>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
+            <Button variant="outline" onClick={() => setShowRejectDialog(false)} disabled={actionLoading}>
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={handleReject}
-              disabled={!rejectionReason || loading}
+              disabled={!rejectionReason.trim() || actionLoading}
             >
-              <XCircle className="h-4 w-4 mr-2" />
-              {loading ? 'Rejecting...' : 'Reject Application'}
+              {actionLoading ? (
+                <>
+                  <Clock className="h-4 w-4 mr-2 animate-spin" />
+                  Rejecting...
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Reject Application
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,761 +1,776 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../shared/ui/card';
-import { Button } from '../../../shared/ui/button';
-import { Badge } from '../../../shared/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../shared/ui/tabs';
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../shared/ui/card";
+import { Button } from "../../../shared/ui/button";
+import { Label } from "../../../shared/ui/label";
+import { Input } from "../../../shared/ui/input";
+import { Badge } from "../../../shared/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../shared/ui/tabs";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../../shared/ui/select';
-import {
-  Users,
   TrendingUp,
-  DollarSign,
+  Users,
   Calendar,
+  DollarSign,
   Award,
-  BarChart3,
+  RefreshCw,
   Download,
-  PieChart,
-} from 'lucide-react';
-import { getPlatformAnalytics, exportAnalyticsReport } from '../api.js';
+  Clock,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
+import {
+  getEngagementMetrics,
+  getAppointmentMetrics,
+  getRevenueMetrics,
+  getLoyaltyMetrics,
+  getRetentionMetrics,
+  getPlatformMetrics,
+  getDemographics,
+  exportMetricsCSV,
+  exportMetricsPDF,
+} from "../api.js";
 
 export default function AdminAnalytics() {
-  const [timeRange, setTimeRange] = useState('30d');
-  const [analyticsData, setAnalyticsData] = useState({});
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab") || "platform";
+  
+  const [dateRange, setDateRange] = useState({
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    endDate: new Date().toISOString().split("T")[0],
+  });
+  const [activeTab, setActiveTab] = useState(tabFromUrl);
   const [loading, setLoading] = useState(false);
+  const [metrics, setMetrics] = useState({
+    engagement: null,
+    appointments: null,
+    revenue: null,
+    loyalty: null,
+    retention: null,
+    platform: null,
+    demographics: null,
+  });
+
+  // Sync activeTab with URL param
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   useEffect(() => {
-    loadAnalyticsData();
-  }, [timeRange]);
+    loadMetrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange.startDate, dateRange.endDate, activeTab]);
 
-  const loadAnalyticsData = async () => {
+  const loadMetrics = async () => {
     setLoading(true);
     try {
-      const data = await getPlatformAnalytics(timeRange, 'all');
-      setAnalyticsData(data);
+      const { startDate, endDate } = dateRange;
+      const metricsPromises = [];
+
+      if (activeTab === "platform") {
+        metricsPromises.push(
+          getPlatformMetrics()
+            .then((data) => {
+              // Backend returns {message, metrics: {...}}
+              const metricsData = data?.metrics || data;
+              return { key: "platform", data: metricsData };
+            })
+            .catch((err) => {
+              console.error("Failed to load platform metrics:", err);
+              return { key: "platform", data: null };
+            })
+        );
+      } else if (activeTab === "demographics") {
+        metricsPromises.push(
+          getDemographics()
+            .then((data) => {
+              const demographicsData = data?.demographics || data;
+              console.log("Demographics data:", demographicsData);
+              console.log("Top cities:", demographicsData?.top_cities);
+              console.log("Top states:", demographicsData?.top_states);
+              console.log("Top services:", demographicsData?.top_services);
+              return {
+                key: "demographics",
+                data: demographicsData,
+              };
+            })
+            .catch((err) => {
+              console.error("Failed to load demographics:", err);
+              return { key: "demographics", data: null };
+            })
+        );
+      } else {
+        if (activeTab === "engagement" || activeTab === "all") {
+          metricsPromises.push(
+            getEngagementMetrics(startDate, endDate)
+              .then((data) => ({
+                key: "engagement",
+                data: data?.metrics || data,
+              }))
+              .catch((err) => {
+                console.error("Failed to load engagement metrics:", err);
+                return { key: "engagement", data: null };
+              })
+          );
+        }
+        if (activeTab === "appointments" || activeTab === "all") {
+          metricsPromises.push(
+            getAppointmentMetrics(startDate, endDate)
+              .then((data) => ({
+                key: "appointments",
+                data: data?.metrics || data,
+              }))
+              .catch((err) => {
+                console.error("Failed to load appointment metrics:", err);
+                return { key: "appointments", data: null };
+              })
+          );
+        }
+        if (activeTab === "revenue" || activeTab === "all") {
+          metricsPromises.push(
+            getRevenueMetrics(startDate, endDate)
+              .then((data) => ({
+                key: "revenue",
+                data: data?.metrics || data,
+              }))
+              .catch((err) => {
+                console.error("Failed to load revenue metrics:", err);
+                return { key: "revenue", data: null };
+              })
+          );
+        }
+        if (activeTab === "loyalty" || activeTab === "all") {
+          metricsPromises.push(
+            getLoyaltyMetrics(startDate, endDate)
+              .then((data) => ({
+                key: "loyalty",
+                data: data?.metrics || data,
+              }))
+              .catch((err) => {
+                console.error("Failed to load loyalty metrics:", err);
+                return { key: "loyalty", data: null };
+              })
+          );
+        }
+        if (activeTab === "retention" || activeTab === "all") {
+          metricsPromises.push(
+            getRetentionMetrics(startDate, endDate)
+              .then((data) => ({
+                key: "retention",
+                data: data?.metrics || data,
+              }))
+              .catch((err) => {
+                console.error("Failed to load retention metrics:", err);
+                return { key: "retention", data: null };
+              })
+          );
+        }
+      }
+
+      const results = await Promise.all(metricsPromises);
+      const newMetrics = { ...metrics };
+      results.forEach(({ key, data }) => {
+        newMetrics[key] = data;
+      });
+      setMetrics(newMetrics);
     } catch (error) {
-      console.error('Failed to load analytics data:', error);
+      console.error("Failed to load metrics:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDownloadReport = async () => {
-    setLoading(true);
+  const handleExport = async (format) => {
     try {
-      const result = await exportAnalyticsReport(timeRange, 'pdf');
-      if (result.success) {
-        alert(`Report generated: ${result.downloadUrl}`);
-      }
+      const { startDate, endDate } = dateRange;
+      const metricsType = activeTab === "all" ? "platform" : activeTab;
+      const exportFn = format === "csv" ? exportMetricsCSV : exportMetricsPDF;
+      await exportFn(metricsType, startDate, endDate);
     } catch (error) {
-      console.error('Failed to export report:', error);
-    } finally {
-      setLoading(false);
+      console.error(`Failed to export ${format}:`, error);
+      alert(`Failed to export ${format.toUpperCase()}. Please try again.`);
     }
+  };
+
+  const renderMetricCard = (title, value, icon, subtitle = null) => {
+    const Icon = icon;
+    // Check if value is already a string with % or $, otherwise format it
+    let displayValue = value;
+    if (value !== null && value !== undefined && value !== "—") {
+      if (typeof value === "number") {
+        // If it's a rate (title contains "Rate" or "Churn"), add %
+        if (title.toLowerCase().includes("rate") || title.toLowerCase().includes("churn")) {
+          displayValue = `${value.toFixed(2)}%`;
+        }
+      } else if (typeof value === "string" && !value.includes("%") && !value.includes("$")) {
+        // If it's a string that looks like a number, check if it should have %
+        if (title.toLowerCase().includes("rate") || title.toLowerCase().includes("churn")) {
+          const numValue = parseFloat(value);
+          if (!isNaN(numValue)) {
+            displayValue = `${numValue.toFixed(2)}%`;
+          }
+        }
+      }
+    }
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          <Icon className="h-4 w-4 text-gray-500" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{displayValue || "—"}</div>
+          {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+        </CardContent>
+      </Card>
+    );
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle>Platform Analytics Dashboard</CardTitle>
-              <CardDescription>
-                Comprehensive insights into platform performance and user behavior
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Select value={timeRange} onValueChange={setTimeRange}>
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7d">Last 7 days</SelectItem>
-                  <SelectItem value="30d">Last 30 days</SelectItem>
-                  <SelectItem value="90d">Last 90 days</SelectItem>
-                  <SelectItem value="1y">Last year</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant="outline" onClick={handleDownloadReport} disabled={loading}>
-                <Download className="h-4 w-4 mr-2" />
-                {loading ? 'Generating...' : 'Export Report'}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Analytics & Metrics</h1>
+          <p className="text-gray-600 mt-2">Platform performance and user engagement analytics</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => handleExport("csv")}>
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
+            <Download className="h-4 w-4 mr-2" />
+            Export PDF
+          </Button>
+        </div>
+      </div>
 
-      <Tabs defaultValue="engagement">
-        <TabsList className="grid w-full grid-cols-6">
+      {activeTab !== "platform" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Date Range</CardTitle>
+            <CardDescription>Select the time period for metrics analysis</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="start-date">Start Date</Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  value={dateRange.startDate}
+                  onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="end-date">End Date</Label>
+                <Input
+                  id="end-date"
+                  type="date"
+                  value={dateRange.endDate}
+                  onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <Button onClick={loadMetrics} className="mt-4" disabled={loading}>
+              {loading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh Metrics
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Tabs 
+        value={activeTab} 
+        onValueChange={(value) => {
+          setActiveTab(value);
+          setSearchParams({ tab: value });
+        }}
+      >
+        <TabsList className="grid w-full grid-cols-7">
+          <TabsTrigger value="platform">Platform</TabsTrigger>
           <TabsTrigger value="engagement">Engagement</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
           <TabsTrigger value="revenue">Revenue</TabsTrigger>
-          <TabsTrigger value="loyalty">Loyalty</TabsTrigger>
           <TabsTrigger value="demographics">Demographics</TabsTrigger>
+          <TabsTrigger value="loyalty">Loyalty</TabsTrigger>
           <TabsTrigger value="retention">Retention</TabsTrigger>
         </TabsList>
 
-        {/* User Engagement Tab */}
-        <TabsContent value="engagement" className="space-y-6">
-          <div className="grid md:grid-cols-4 gap-6">
+        <TabsContent value="platform" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <Clock className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : metrics.platform ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {renderMetricCard("Total Users", metrics.platform?.users?.total || metrics.platform?.total_users, Users)}
+              {renderMetricCard("Total Salons", metrics.platform?.salons?.total || metrics.platform?.total_salons, TrendingUp)}
+              {renderMetricCard("Total Appointments", metrics.platform?.appointments?.total || metrics.platform?.total_appointments, Calendar)}
+            </div>
+          ) : (
             <Card>
-              <CardHeader className="pb-3">
-                <CardDescription className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Total Users
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-baseline gap-2">
-                  <div>{analyticsData.totalUsers?.toLocaleString() || '12,453'}</div>
-                  <Badge variant="secondary" className="text-xs">
-                    <TrendingUp className="h-3 w-3 mr-1" />
-                    +18%
-                  </Badge>
-                </div>
+              <CardContent className="py-12 text-center text-gray-500">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>No platform metrics available.</p>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Daily Active Users</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-baseline gap-2">
-                  <div>3,247</div>
-                  <Badge variant="secondary" className="text-xs">
-                    <TrendingUp className="h-3 w-3 mr-1" />
-                    +12%
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>New Signups</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-baseline gap-2">
-                  <div>847</div>
-                  <span className="text-xs text-gray-500">this month</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Avg Session Duration</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>8m 42s</div>
-                <p className="text-xs text-gray-500 mt-1">+15% from last month</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>User Activity Trends</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64 flex items-end justify-around gap-2 p-4">
-                {[65, 59, 80, 81, 56, 75, 88].map((height, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                    <div
-                      className="w-full bg-purple-600 rounded-t min-h-[20px]"
-                      style={{ height: `${Math.max(height, 20)}%` }}
-                    />
-                    <span className="text-xs text-gray-500">
-                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i]}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Features Used</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  { feature: 'Booking', usage: 87 },
-                  { feature: 'Reviews', usage: 65 },
-                  { feature: 'Loyalty Program', usage: 54 },
-                  { feature: 'Shop', usage: 42 },
-                  { feature: 'Scheduling', usage: 38 },
-                ].map((item) => (
-                  <div key={item.feature}>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-sm">{item.feature}</span>
-                      <span className="text-sm text-gray-600">{item.usage}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-purple-600 h-2 rounded-full"
-                        style={{ width: `${item.usage}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>User Segments</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center p-3 border rounded-lg">
-                    <div>
-                      <p>Customers</p>
-                      <p className="text-xs text-gray-500">Regular users booking services</p>
-                    </div>
-                    <Badge>9,847</Badge>
-                  </div>
-                  <div className="flex justify-between items-center p-3 border rounded-lg">
-                    <div>
-                      <p>Salon Owners</p>
-                      <p className="text-xs text-gray-500">Business accounts</p>
-                    </div>
-                    <Badge>2,156</Badge>
-                  </div>
-                  <div className="flex justify-between items-center p-3 border rounded-lg">
-                    <div>
-                      <p>Barbers</p>
-                      <p className="text-xs text-gray-500">Service providers</p>
-                    </div>
-                    <Badge>450</Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          )}
         </TabsContent>
 
-        {/* Appointments Tab */}
-        <TabsContent value="appointments" className="space-y-6">
-          <div className="grid md:grid-cols-4 gap-6">
+        <TabsContent value="engagement" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <Clock className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : metrics.engagement ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {renderMetricCard(
+                "Total New Customers", 
+                metrics.engagement.summary?.total_new_customers || metrics.engagement.total_new_customers || 0, 
+                Users,
+                "(Past 30d)"
+              )}
+              {renderMetricCard("Total Appointments", metrics.engagement.summary?.total_appointments || metrics.engagement.total_appointments, TrendingUp)}
+              {renderMetricCard("Avg Daily Appointments", metrics.engagement.summary?.avg_daily_appointments || metrics.engagement.avg_daily_appointments, Calendar)}
+              {renderMetricCard("Engagement Rate", metrics.engagement.summary?.engagement_rate || metrics.engagement.engagement_rate, TrendingUp)}
+              {renderMetricCard("Total Revenue", metrics.engagement.summary?.total_revenue ? `$${metrics.engagement.summary.total_revenue.toLocaleString()}` : metrics.engagement.total_revenue, DollarSign)}
+              {renderMetricCard("Returning Customers", metrics.engagement.summary?.total_returning_customers || metrics.engagement.total_returning_customers, Users)}
+            </div>
+          ) : (
             <Card>
-              <CardHeader className="pb-3">
-                <CardDescription className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Total Appointments
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-baseline gap-2">
-                  <div>45,678</div>
-                  <Badge variant="secondary" className="text-xs">
-                    <TrendingUp className="h-3 w-3 mr-1" />
-                    +24%
-                  </Badge>
-                </div>
+              <CardContent className="py-12 text-center text-gray-500">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>No engagement metrics available for the selected date range.</p>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Completion Rate</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>94.2%</div>
-                <p className="text-xs text-gray-500 mt-1">Above industry avg</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Cancellation Rate</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-red-600">5.8%</div>
-                <p className="text-xs text-gray-500 mt-1">Within acceptable range</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Avg Booking Lead Time</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>3.2 days</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Peak Booking Hours</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64 flex items-end justify-around gap-1 p-4">
-                {[12, 15, 22, 45, 65, 88, 92, 85, 78, 68, 52, 38].map((height, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                    <div
-                      className="w-full bg-blue-600 rounded-t min-h-[10px]"
-                      style={{ height: `${Math.max(height, 10)}%` }}
-                    />
-                    <span className="text-xs text-gray-500">{i + 9}:00</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Popular Services</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  { service: 'Haircut', bookings: 18453 },
-                  { service: 'Hair Coloring', bookings: 12847 },
-                  { service: 'Beard Trim', bookings: 8932 },
-                  { service: 'Styling', bookings: 5446 },
-                ].map((item) => (
-                  <div
-                    key={item.service}
-                    className="flex justify-between items-center p-3 border rounded-lg"
-                  >
-                    <span>{item.service}</span>
-                    <Badge>{item.bookings.toLocaleString()} bookings</Badge>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Appointment Trends</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm mb-1">Weekday vs Weekend</p>
-                    <div className="flex gap-2">
-                      <div className="flex-1 p-3 bg-blue-100 rounded text-center">
-                        <p>72%</p>
-                        <p className="text-xs text-gray-600">Weekday</p>
-                      </div>
-                      <div className="flex-1 p-3 bg-purple-100 rounded text-center">
-                        <p>28%</p>
-                        <p className="text-xs text-gray-600">Weekend</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm mb-1">Booking Method</p>
-                    <div className="flex gap-2">
-                      <div className="flex-1 p-3 bg-green-100 rounded text-center">
-                        <p>89%</p>
-                        <p className="text-xs text-gray-600">Online</p>
-                      </div>
-                      <div className="flex-1 p-3 bg-gray-100 rounded text-center">
-                        <p>11%</p>
-                        <p className="text-xs text-gray-600">Walk-in</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          )}
         </TabsContent>
 
-        {/* Revenue Tab */}
-        <TabsContent value="revenue" className="space-y-6">
-          <div className="grid md:grid-cols-4 gap-6">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
-                  Total Revenue
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-baseline gap-2">
-                  <div>$1.2M</div>
-                  <Badge variant="secondary" className="text-xs">
-                    <TrendingUp className="h-3 w-3 mr-1" />
-                    +32%
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Avg Transaction Value</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>$67.50</div>
-                <p className="text-xs text-gray-500 mt-1">+8% from last month</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Platform Fee Revenue</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>$84,500</div>
-                <p className="text-xs text-gray-500 mt-1">7% of total</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Top Earning Salon</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>Elite Studio</div>
-                <p className="text-xs text-gray-500 mt-1">$38,450 this month</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Revenue by Salon Performance Tier</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <p>Top Performers</p>
-                    <Badge>15%</Badge>
-                  </div>
-                  <p>$540K</p>
-                  <p className="text-xs text-gray-500 mt-1">45% of total revenue</p>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <p>Mid-tier Salons</p>
-                    <Badge variant="secondary">45%</Badge>
-                  </div>
-                  <p>$480K</p>
-                  <p className="text-xs text-gray-500 mt-1">40% of total revenue</p>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <p>Growing Salons</p>
-                    <Badge variant="secondary">40%</Badge>
-                  </div>
-                  <p>$180K</p>
-                  <p className="text-xs text-gray-500 mt-1">15% of total revenue</p>
-                </div>
+        <TabsContent value="appointments" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <Clock className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : metrics.appointments ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {renderMetricCard("Total Appointments", metrics.appointments.total_appointments, Calendar)}
+                {renderMetricCard("Completion Rate", metrics.appointments.completion_rate, CheckCircle)}
+                {renderMetricCard("Cancellation Rate", metrics.appointments.cancellation_rate, XCircle)}
+                {metrics.appointments.peak_hour !== null && metrics.appointments.peak_hour !== undefined && (
+                  renderMetricCard("Peak Hour", `${metrics.appointments.peak_hour}:00 (${metrics.appointments.peak_hour_count} appointments)`, Clock)
+                )}
               </div>
-            </CardContent>
-          </Card>
+              
+              {metrics.appointments.peak_hours && metrics.appointments.peak_hours.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Appointments by Hour of Day</CardTitle>
+                    <CardDescription>Distribution of appointments throughout the day</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {metrics.appointments.peak_hours.map(({ hour, count }) => {
+                        const maxCount = Math.max(...metrics.appointments.peak_hours.map(h => h.count));
+                        const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                        return (
+                          <div key={hour} className="flex items-center gap-4">
+                            <div className="w-16 text-sm font-medium">{hour}:00</div>
+                            <div className="flex-1">
+                              <div className="h-6 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-indigo-600 rounded-full transition-all"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="w-16 text-sm text-right">{count}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {metrics.appointments.day_of_week_trends && metrics.appointments.day_of_week_trends.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Appointments by Day of Week</CardTitle>
+                    <CardDescription>Weekly appointment distribution</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {metrics.appointments.day_of_week_trends.map(({ day, count }) => {
+                        const maxCount = Math.max(...metrics.appointments.day_of_week_trends.map(d => d.count));
+                        const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                        return (
+                          <div key={day} className="flex items-center gap-4">
+                            <div className="w-24 text-sm font-medium">{day}</div>
+                            <div className="flex-1">
+                              <div className="h-6 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-indigo-600 rounded-full transition-all"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="w-16 text-sm text-right">{count}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center text-gray-500">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>No appointment metrics available for the selected date range.</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        {/* Loyalty Tab */}
-        <TabsContent value="loyalty" className="space-y-6">
-          <div className="grid md:grid-cols-4 gap-6">
+        <TabsContent value="revenue" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <Clock className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : metrics.revenue ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {renderMetricCard("Total Revenue", `$${metrics.revenue.total_revenue?.toLocaleString() || "—"}`, DollarSign)}
+              {renderMetricCard("Avg Transaction", `$${metrics.revenue.avg_transaction_value || "—"}`, TrendingUp)}
+              {renderMetricCard("Platform Fees", `$${metrics.revenue.platform_fee_revenue?.toLocaleString() || "—"}`, DollarSign)}
+            </div>
+          ) : (
             <Card>
-              <CardHeader className="pb-3">
-                <CardDescription className="flex items-center gap-2">
-                  <Award className="h-4 w-4" />
-                  Active Members
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-baseline gap-2">
-                  <div>8,234</div>
-                  <Badge variant="secondary" className="text-xs">
-                    66% of users
-                  </Badge>
-                </div>
+              <CardContent className="py-12 text-center text-gray-500">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>No revenue metrics available for the selected date range.</p>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Points Earned</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>1.2M</div>
-                <p className="text-xs text-gray-500 mt-1">This month</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Points Redeemed</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>847K</div>
-                <p className="text-xs text-gray-500 mt-1">71% redemption rate</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Avg Points per User</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>146</div>
-                <p className="text-xs text-gray-500 mt-1">Active balance</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Program Effectiveness</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-4 bg-green-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Repeat Visit Rate</p>
-                  <p>78%</p>
-                  <p className="text-xs text-gray-500 mt-1">+12% since loyalty launch</p>
-                </div>
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Avg Visits per Member</p>
-                  <p>4.2</p>
-                  <p className="text-xs text-gray-500 mt-1">vs 2.1 for non-members</p>
-                </div>
-                <div className="p-4 bg-purple-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Revenue from Members</p>
-                  <p>$892K</p>
-                  <p className="text-xs text-gray-500 mt-1">74% of total revenue</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Popular Rewards</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  { reward: '$5 discount', redeemed: 3245 },
-                  { reward: '$10 discount', redeemed: 1876 },
-                  { reward: 'Free product', redeemed: 892 },
-                  { reward: 'VIP membership', redeemed: 234 },
-                ].map((item) => (
-                  <div
-                    key={item.reward}
-                    className="flex justify-between items-center p-3 border rounded-lg"
-                  >
-                    <span>{item.reward}</span>
-                    <Badge>{item.redeemed} redeemed</Badge>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
+          )}
         </TabsContent>
 
-        {/* Demographics Tab */}
-        <TabsContent value="demographics" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>User Demographics Overview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-3 gap-6">
-                <div>
-                  <p className="text-sm text-gray-600 mb-3">Age Distribution</p>
-                  <div className="space-y-2">
-                    {[
-                      { range: '18-24', percent: 22 },
-                      { range: '25-34', percent: 38 },
-                      { range: '35-44', percent: 25 },
-                      { range: '45-54', percent: 12 },
-                      { range: '55+', percent: 3 },
-                    ].map((item) => (
-                      <div key={item.range}>
-                        <div className="flex justify-between mb-1">
-                          <span className="text-xs">{item.range}</span>
-                          <span className="text-xs text-gray-600">{item.percent}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-purple-600 h-2 rounded-full"
-                            style={{ width: `${item.percent}%` }}
-                          />
-                        </div>
+        <TabsContent value="demographics" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <Clock className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : metrics.demographics ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {renderMetricCard("Total Users", metrics.demographics.total_users || 0, Users)}
+                {renderMetricCard("Total Cities", metrics.demographics.location_distribution?.length || 0, TrendingUp)}
+                {renderMetricCard("Total States", metrics.demographics.state_distribution?.length || 0, TrendingUp)}
+              </div>
+
+              {metrics.demographics.role_distribution && metrics.demographics.role_distribution.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>User Distribution by Role</CardTitle>
+                    <CardDescription>Breakdown of users by their role on the platform</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {metrics.demographics.role_distribution.map(({ role, count }) => {
+                        const total = metrics.demographics.total_users || 1;
+                        const percentage = ((count / total) * 100).toFixed(1);
+                        return (
+                          <div key={role} className="flex items-center gap-4">
+                            <div className="w-24 text-sm font-medium capitalize">{role}</div>
+                            <div className="flex-1">
+                              <div className="h-6 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-indigo-600 rounded-full transition-all"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="w-20 text-sm text-right">{count}</div>
+                            <div className="w-16 text-sm text-gray-500 text-right">{percentage}%</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {metrics.demographics.gender_distribution && metrics.demographics.gender_distribution.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Gender Distribution</CardTitle>
+                    <CardDescription>User distribution by gender</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {metrics.demographics.gender_distribution.map(({ gender, count }) => {
+                        const total = metrics.demographics.gender_percentages
+                          ? Object.values(metrics.demographics.gender_percentages).reduce((a, b) => a + b, 0)
+                          : count;
+                        const percentage = metrics.demographics.gender_percentages?.[gender] || 
+                          ((count / (total || 1)) * 100).toFixed(1);
+                        return (
+                          <div key={gender} className="flex items-center gap-4">
+                            <div className="w-24 text-sm font-medium capitalize">{gender || "Not Specified"}</div>
+                            <div className="flex-1">
+                              <div className="h-6 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-blue-600 rounded-full transition-all"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="w-20 text-sm text-right">{count}</div>
+                            <div className="w-16 text-sm text-gray-500 text-right">{percentage}%</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {metrics.demographics.age_distribution && metrics.demographics.age_distribution.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Age Distribution</CardTitle>
+                    <CardDescription>User distribution by age bracket</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {metrics.demographics.age_distribution.map(({ age_bracket, count }) => {
+                        const total = metrics.demographics.age_percentages
+                          ? Object.values(metrics.demographics.age_percentages).reduce((a, b) => a + b, 0)
+                          : count;
+                        const percentage = metrics.demographics.age_percentages?.[age_bracket] || 
+                          ((count / (total || 1)) * 100).toFixed(1);
+                        return (
+                          <div key={age_bracket} className="flex items-center gap-4">
+                            <div className="w-32 text-sm font-medium">{age_bracket || "Not Specified"}</div>
+                            <div className="flex-1">
+                              <div className="h-6 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-green-600 rounded-full transition-all"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="w-20 text-sm text-right">{count}</div>
+                            <div className="w-16 text-sm text-gray-500 text-right">{percentage}%</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Cities</CardTitle>
+                  <CardDescription>Cities with the most users</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const citiesData = (metrics.demographics.top_cities && metrics.demographics.top_cities.length > 0) ? 
+                      metrics.demographics.top_cities : 
+                      (metrics.demographics.location_distribution || []).slice(0, 10);
+                    
+                    if (!citiesData || citiesData.length === 0) {
+                      return <p className="text-sm text-gray-500 text-center py-4">No city data available</p>;
+                    }
+                    
+                    const maxCount = Math.max(...citiesData.map(c => c.count || 0));
+                    
+                    return (
+                      <div className="space-y-2">
+                        {citiesData.map((item, index) => {
+                          const city = item.city || item.name || 'Unknown';
+                          const count = item.count || 0;
+                          const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                          return (
+                            <div key={`city-${index}-${city}-${count}`} className="flex items-center gap-4">
+                              <div className="w-8 text-sm font-medium text-gray-500">#{index + 1}</div>
+                              <div className="w-32 text-sm font-medium">{city}</div>
+                              <div className="flex-1">
+                                <div className="h-6 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-purple-600 rounded-full transition-all"
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="w-20 text-sm text-right">{count}</div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
 
-                <div>
-                  <p className="text-sm text-gray-600 mb-3">Gender Split</p>
-                  <div className="space-y-3">
-                    <div className="p-4 border rounded-lg text-center">
-                      <p>54%</p>
-                      <p className="text-xs text-gray-600 mt-1">Female</p>
-                    </div>
-                    <div className="p-4 border rounded-lg text-center">
-                      <p>44%</p>
-                      <p className="text-xs text-gray-600 mt-1">Male</p>
-                    </div>
-                    <div className="p-4 border rounded-lg text-center">
-                      <p>2%</p>
-                      <p className="text-xs text-gray-600 mt-1">Other/Unspecified</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600 mb-3">Top Locations</p>
-                  <div className="space-y-2">
-                    {[
-                      { city: 'New York', users: 3245 },
-                      { city: 'Los Angeles', users: 2876 },
-                      { city: 'Chicago', users: 1892 },
-                      { city: 'Houston', users: 1234 },
-                      { city: 'Phoenix', users: 987 },
-                    ].map((item) => (
-                      <div
-                        key={item.city}
-                        className="flex justify-between items-center p-2 border rounded"
-                      >
-                        <span className="text-sm">{item.city}</span>
-                        <Badge variant="secondary">{item.users}</Badge>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top States</CardTitle>
+                  <CardDescription>States with the most users</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const statesData = (metrics.demographics.top_states && metrics.demographics.top_states.length > 0) ? 
+                      metrics.demographics.top_states : 
+                      (metrics.demographics.state_distribution || []).slice(0, 10);
+                    
+                    if (!statesData || statesData.length === 0) {
+                      return <p className="text-sm text-gray-500 text-center py-4">No state data available</p>;
+                    }
+                    
+                    const maxCount = Math.max(...statesData.map(s => s.count || 0));
+                    
+                    return (
+                      <div className="space-y-2">
+                        {statesData.map((item, index) => {
+                          const state = item.state || item.name || 'Unknown';
+                          const count = item.count || 0;
+                          const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                          return (
+                            <div key={`state-${index}-${state}-${count}`} className="flex items-center gap-4">
+                              <div className="w-8 text-sm font-medium text-gray-500">#{index + 1}</div>
+                              <div className="w-32 text-sm font-medium">{state}</div>
+                              <div className="flex-1">
+                                <div className="h-6 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-orange-600 rounded-full transition-all"
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="w-20 text-sm text-right">{count}</div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Preferred Services</CardTitle>
+                  <CardDescription>Most popular services among users</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const servicesData = (metrics.demographics.top_services && metrics.demographics.top_services.length > 0) ? 
+                      metrics.demographics.top_services : 
+                      (metrics.demographics.service_distribution || []).slice(0, 10);
+                    
+                    if (!servicesData || servicesData.length === 0) {
+                      return <p className="text-sm text-gray-500 text-center py-4">No service data available</p>;
+                    }
+                    
+                    const maxCount = Math.max(...servicesData.map(s => s.count || 0));
+                    
+                    return (
+                      <div className="space-y-2">
+                        {servicesData.map((item, index) => {
+                          const service = item.service || item.name || 'Unknown';
+                          const count = item.count || 0;
+                          const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                          return (
+                            <div key={`service-${index}-${service}-${count}`} className="flex items-center gap-4">
+                              <div className="w-8 text-sm font-medium text-gray-500">#{index + 1}</div>
+                              <div className="w-48 text-sm font-medium">{service}</div>
+                              <div className="flex-1">
+                                <div className="h-6 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-teal-600 rounded-full transition-all"
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="w-20 text-sm text-right">{count}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center text-gray-500">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>No demographic data available.</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        {/* Retention Tab */}
-        <TabsContent value="retention" className="space-y-6">
-          <div className="grid md:grid-cols-4 gap-6">
+        <TabsContent value="loyalty" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <Clock className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : metrics.loyalty ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {renderMetricCard("Active Members", metrics.loyalty.active_members, Users)}
+              {renderMetricCard("Points Earned", metrics.loyalty.points_earned?.toLocaleString() || "—", Award)}
+              {renderMetricCard("Points Redeemed", metrics.loyalty.points_redeemed?.toLocaleString() || "—", Award)}
+            </div>
+          ) : (
             <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Overall Retention Rate</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-baseline gap-2">
-                  <div>82%</div>
-                  <Badge variant="secondary" className="text-xs">
-                    <TrendingUp className="h-3 w-3 mr-1" />
-                    +5%
-                  </Badge>
-                </div>
+              <CardContent className="py-12 text-center text-gray-500">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>No loyalty metrics available for the selected date range.</p>
               </CardContent>
             </Card>
+          )}
+        </TabsContent>
 
+        <TabsContent value="retention" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <Clock className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : metrics.retention ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {renderMetricCard("Retention Rate", metrics.retention.retention_rate, TrendingUp)}
+              {renderMetricCard("Churn Rate", metrics.retention.churn_rate || (metrics.retention.total_customers > 0 ? (100 - (metrics.retention.retention_rate || 0)).toFixed(2) : 0), AlertCircle)}
+              {renderMetricCard("Repeat Customers", metrics.retention.repeat_customers || metrics.retention.returning_customers || 0, Users)}
+            </div>
+          ) : (
             <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Churn Rate</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-red-600">18%</div>
-                <p className="text-xs text-gray-500 mt-1">Down from 23%</p>
+              <CardContent className="py-12 text-center text-gray-500">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>No retention metrics available for the selected date range.</p>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Avg Customer Lifetime</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>8.2 months</div>
-                <p className="text-xs text-gray-500 mt-1">Increasing trend</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Customer LTV</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div>$542</div>
-                <p className="text-xs text-gray-500 mt-1">Average lifetime value</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Retention Cohort Analysis</CardTitle>
-              <CardDescription>
-                Percentage of users still active after signup
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2">Cohort</th>
-                      <th className="text-center p-2">Month 1</th>
-                      <th className="text-center p-2">Month 3</th>
-                      <th className="text-center p-2">Month 6</th>
-                      <th className="text-center p-2">Month 12</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { month: 'Jan 2025', m1: 100, m3: 78, m6: 65, m12: 54 },
-                      { month: 'Dec 2024', m1: 100, m3: 82, m6: 71, m12: 62 },
-                      { month: 'Nov 2024', m1: 100, m3: 85, m6: 75, m12: 68 },
-                      { month: 'Oct 2024', m1: 100, m3: 79, m6: 68, m12: 58 },
-                    ].map((row) => (
-                      <tr key={row.month} className="border-b">
-                        <td className="p-2">{row.month}</td>
-                        <td className="text-center p-2">
-                          <Badge>{row.m1}%</Badge>
-                        </td>
-                        <td className="text-center p-2">
-                          <Badge variant="secondary">{row.m3}%</Badge>
-                        </td>
-                        <td className="text-center p-2">
-                          <Badge variant="secondary">{row.m6}%</Badge>
-                        </td>
-                        <td className="text-center p-2">
-                          <Badge variant="secondary">{row.m12}%</Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Satisfaction Metrics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="p-4 bg-green-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Average Rating</p>
-                  <p>4.7 / 5.0</p>
-                  <p className="text-xs text-gray-500 mt-1">Based on 12,453 reviews</p>
-                </div>
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">NPS Score</p>
-                  <p>68</p>
-                  <p className="text-xs text-gray-500 mt-1">Excellent range</p>
-                </div>
-                <div className="p-4 bg-purple-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Recommendation Rate</p>
-                  <p>89%</p>
-                  <p className="text-xs text-gray-500 mt-1">Would recommend to others</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>

@@ -8,12 +8,13 @@ import { Alert, AlertDescription } from "../../../shared/ui/alert";
 import { Badge } from "../../../shared/ui/badge";
 import { CheckCircle2, Clock, Upload, AlertCircle, Info } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { submitSalonRegistration, getOwnedSalon, getSalonDetail, updatePendingApplication, checkSetupStatus } from "../api.js";
+import { submitSalonRegistration, getOwnedSalon, getSalonDetail, updatePendingApplication, checkSetupStatus, submitSalonAppeal, getSalonStatusHistory } from "../api.js";
 
 export default function SalonRegister() {
   const navigate = useNavigate();
   const [status, setStatus] = useState("loading");
   const [statusMessage, setStatusMessage] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [ownedSalon, setOwnedSalon] = useState(null);
   const [currentSalonId, setCurrentSalonId] = useState(null);
@@ -70,60 +71,93 @@ export default function SalonRegister() {
         setIsEditing(false);
       } else if (salon.status === "rejected") {
         setStatus("rejected");
-        setShowForm(false);
-        setIsEditing(false);
+        setShowForm(true);
+        setIsEditing(true);
+        // Reset form fields for fresh appeal (don't preload old data)
+        setName("");
+        setAddress("");
+        setCity("");
+        setState("");
+        setZip("");
+        setPhone("");
+        setEmail("");
+        setDescription("");
+        setTimezone("America/New_York");
+        setLogoFile(null);
+        setLicenseFile(null);
+        // Fetch rejection reason from status history
+        try {
+          const history = await getSalonStatusHistory(salon.id);
+          const rejectionNotif = history.timeline?.find(n => 
+            n.title === "Salon Denied" || n.message?.includes("Denied")
+          );
+          if (rejectionNotif?.message) {
+            // Extract reason from message (format: "Your Salon has been Denied. Reason(s): {reason}")
+            const reasonMatch = rejectionNotif.message.match(/Reason\(s\):\s*(.+)/i);
+            if (reasonMatch) {
+              setRejectionReason(reasonMatch[1].trim());
+            } else {
+              setRejectionReason(rejectionNotif.message);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch rejection reason:", err);
+        }
       } else {
         setStatus("not_submitted");
         setShowForm(true);
         setIsEditing(true);
       }
 
-      try {
-        const detail = await getSalonDetail(salon.id);
-        setName(detail.name || salon.name || "");
-        setAddress(detail.address || salon.address || "");
-        setCity(detail.city || "");
-        setState(detail.state || "");
-        setZip(detail.zip_code || "");
-        setPhone(detail.phone || "");
-        setEmail(detail.email || "");
-        setDescription(detail.description || "");
-        setTimezone(detail.timezone || "America/New_York");
-        setExistingLogoUrl(cacheBust(detail.logo_url || salon.logo_url || ""));
-        setExistingLicenseUrl(cacheBust(detail.license_url || salon.license_url || ""));
-        setOriginalValues({
-          name: detail.name || salon.name || "",
-          address: detail.address || salon.address || "",
-          city: detail.city || "",
-          state: detail.state || "",
-          zip: detail.zip_code || "",
-          phone: detail.phone || "",
-          email: detail.email || "",
-          description: detail.description || "",
-          timezone: detail.timezone || "America/New_York",
-        });
-      } catch (err) {
-        setName(salon?.name || "");
-        setAddress(salon?.address || "");
-        setCity(salon?.city || "");
-        setState(salon?.state || "");
-        setZip(salon?.zip_code || "");
-        setPhone(salon?.phone || "");
-        setEmail(salon?.email || "");
-        setDescription(salon?.description || "");
-        setExistingLogoUrl(cacheBust(salon?.logo_url || ""));
-        setExistingLicenseUrl(cacheBust(salon?.license_url || ""));
-        setOriginalValues({
-          name: salon?.name || "",
-          address: salon?.address || "",
-          city: salon?.city || "",
-          state: salon?.state || "",
-          zip: salon?.zip_code || "",
-          phone: salon?.phone || "",
-          email: salon?.email || "",
-          description: salon?.description || "",
-          timezone: salon?.timezone || "America/New_York",
-        });
+      // Only load detail data if not rejected (rejected salons get fresh form)
+      if (salon.status !== "rejected") {
+        try {
+          const detail = await getSalonDetail(salon.id);
+          setName(detail.name || salon.name || "");
+          setAddress(detail.address || salon.address || "");
+          setCity(detail.city || "");
+          setState(detail.state || "");
+          setZip(detail.zip_code || "");
+          setPhone(detail.phone || "");
+          setEmail(detail.email || "");
+          setDescription(detail.description || "");
+          setTimezone(detail.timezone || "America/New_York");
+          setExistingLogoUrl(cacheBust(detail.logo_url || salon.logo_url || ""));
+          setExistingLicenseUrl(cacheBust(detail.license_url || salon.license_url || ""));
+          setOriginalValues({
+            name: detail.name || salon.name || "",
+            address: detail.address || salon.address || "",
+            city: detail.city || "",
+            state: detail.state || "",
+            zip: detail.zip_code || "",
+            phone: detail.phone || "",
+            email: detail.email || "",
+            description: detail.description || "",
+            timezone: detail.timezone || "America/New_York",
+          });
+        } catch (err) {
+          setName(salon?.name || "");
+          setAddress(salon?.address || "");
+          setCity(salon?.city || "");
+          setState(salon?.state || "");
+          setZip(salon?.zip_code || "");
+          setPhone(salon?.phone || "");
+          setEmail(salon?.email || "");
+          setDescription(salon?.description || "");
+          setExistingLogoUrl(cacheBust(salon?.logo_url || ""));
+          setExistingLicenseUrl(cacheBust(salon?.license_url || ""));
+          setOriginalValues({
+            name: salon?.name || "",
+            address: salon?.address || "",
+            city: salon?.city || "",
+            state: salon?.state || "",
+            zip: salon?.zip_code || "",
+            phone: salon?.phone || "",
+            email: salon?.email || "",
+            description: salon?.description || "",
+            timezone: salon?.timezone || "America/New_York",
+          });
+        }
       }
     } catch (error) {
       console.error("Failed to load owned salons:", error);
@@ -246,14 +280,44 @@ export default function SalonRegister() {
           setIsEditing(false);
         } else if (salon.status === "rejected") {
           setStatus("rejected");
-          setShowForm(false);
-          setIsEditing(false);
+          setShowForm(true);
+          setIsEditing(true);
+          // Reset form fields for fresh appeal (don't preload old data)
+          setName("");
+          setAddress("");
+          setCity("");
+          setState("");
+          setZip("");
+          setPhone("");
+          setEmail("");
+          setDescription("");
+          setTimezone("America/New_York");
+          setLogoFile(null);
+          setLicenseFile(null);
+          // Fetch rejection reason from status history
+          try {
+            const history = await getSalonStatusHistory(salon.id);
+            const rejectionNotif = history.timeline?.find(n => 
+              n.title === "Salon Denied" || n.message?.includes("Denied")
+            );
+            if (rejectionNotif?.message) {
+              const reasonMatch = rejectionNotif.message.match(/Reason\(s\):\s*(.+)/i);
+              if (reasonMatch) {
+                setRejectionReason(reasonMatch[1].trim());
+              } else {
+                setRejectionReason(rejectionNotif.message);
+              }
+            }
+          } catch (err) {
+            console.error("Failed to fetch rejection reason:", err);
+          }
         } else {
           setStatus("not_submitted");
           setShowForm(true);
           setIsEditing(true);
         }
-        if (salon?.id) {
+        // Only load detail data if not rejected (rejected salons get fresh form)
+        if (salon?.id && salon.status !== "rejected") {
           try {
             const detail = await getSalonDetail(salon.id);
             setName(detail.name || salon.name || "");
@@ -401,12 +465,48 @@ export default function SalonRegister() {
     }
   };
 
+  const handleAppeal = async (e) => {
+    e.preventDefault();
+    if (!currentSalonId) return;
+    if (!validateForm()) return;
+    setLoading(true);
+    try {
+      const cleanPhone = phone ? phone.replace(/\D/g, "") : "";
+
+      const result = await submitSalonAppeal(currentSalonId, {
+        name,
+        address,
+        city,
+        state,
+        zip_code: zip,
+        phone: cleanPhone || undefined,
+        email: email || undefined,
+        description,
+        timezone,
+        logoFile,
+        licenseFile,
+      });
+
+      setStatus("pending");
+      setStatusMessage(result.message || "Appeal submitted. Awaiting admin review.");
+      setShowForm(false);
+      setIsEditing(false);
+      setRejectionReason("");
+      await refreshSalonData();
+    } catch (error) {
+      setFormError(parseError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const primarySalon = ownedSalon;
   const isApproved = status === "approved";
   const isPending = status === "pending";
   const isRejected = status === "rejected";
   const canSubmitNew = status === "not_submitted";
   const canUpdatePending = isPending && !!currentSalonId;
+  const canAppeal = isRejected && !!currentSalonId;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -447,9 +547,17 @@ export default function SalonRegister() {
           </div>
         )}
         {status === "rejected" && (
-          <div className="mt-4 flex items-center gap-2 text-sm text-indigo-50">
-            <AlertCircle className="h-4 w-4" />
-            <span>Your last application was rejected. Update your details and resubmit.</span>
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm text-indigo-50">
+              <AlertCircle className="h-4 w-4" />
+              <span>Your application was rejected. You can submit an appeal with updated information.</span>
+            </div>
+            {rejectionReason && (
+              <div className="ml-6 p-3 bg-white/10 rounded-lg border border-white/20">
+                <p className="text-xs font-semibold text-indigo-50 mb-1">Rejection Reason:</p>
+                <p className="text-sm text-indigo-100">{rejectionReason}</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -476,7 +584,7 @@ export default function SalonRegister() {
         </Card>
       )}
 
-      {!isApproved && !isRejected && showForm && (
+      {!isApproved && showForm && (
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">Business Details</CardTitle>
@@ -485,7 +593,7 @@ export default function SalonRegister() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={canUpdatePending ? handleUpdatePending : handleSubmit} className="space-y-8">
+            <form onSubmit={canAppeal ? handleAppeal : canUpdatePending ? handleUpdatePending : handleSubmit} className="space-y-8">
               {!canSubmitNew && (
                 <div className="flex justify-end">
                   <Button
@@ -675,13 +783,15 @@ export default function SalonRegister() {
             <Button
               type="submit"
               className="w-full"
-              disabled={loading || (!isEditing && !canSubmitNew) || (isPending && !canUpdatePending)}
+              disabled={loading || (!isEditing && !canSubmitNew && !canAppeal) || (isPending && !canUpdatePending)}
             >
               {loading
                 ? "Saving..."
-                : canUpdatePending
-                  ? "Update Application"
-                  : "Submit Application"}
+                : canAppeal
+                  ? "Submit Appeal"
+                  : canUpdatePending
+                    ? "Update Application"
+                    : "Submit Application"}
             </Button>
           </form>
         </CardContent>
@@ -701,21 +811,6 @@ export default function SalonRegister() {
         </Card>
       )}
 
-      {isRejected && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Application rejected</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Your application was rejected. Please submit an appeal or contact support to proceed.
-              </AlertDescription>
-            </Alert>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>

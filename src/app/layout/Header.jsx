@@ -137,7 +137,8 @@ export default function Header() {
             <NavLink to="/admin/dashboard" className={linkClass}>Dashboard</NavLink>
             <NavLink to="/admin/verify" className={linkClass}>Salon Verification</NavLink>
             <NavLink to="/admin/analytics" className={linkClass}>Analytics</NavLink>
-            <NavLink to="/admin/health" className={linkClass}>Platform Health</NavLink>
+            <NavLink to="/admin/audit-logs" className={linkClass}>Audit</NavLink>
+            <NavLink to="/admin/health" className={linkClass}>Monitor</NavLink>
           </>
         );
       default:
