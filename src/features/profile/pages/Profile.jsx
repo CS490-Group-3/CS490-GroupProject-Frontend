@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/auth-provider.jsx";
-import { getCurrentUserProfile, updateUserProfile, getAvailableServices } from "../api.js";
+import { getCurrentUserProfile, updateUserProfile } from "../api.js";
 import { listUserAppointments } from "../../booking/api.js";
-import { getCustomerPoints } from "../../loyalty/api.js";
 import { Card } from "../../../shared/ui/card.jsx";
 import { Button } from "../../../shared/ui/button.jsx";
 import { Input } from "../../../shared/ui/input.jsx";
@@ -17,7 +16,7 @@ const AGE_BRACKETS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
 const GENDERS = ["male", "female", "non-binary", "prefer-not-to-say", "other"];
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("profile");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -29,8 +28,6 @@ export default function Profile() {
   // Data states
   const [profile, setProfile] = useState(null);
   const [appointments, setAppointments] = useState({ upcoming: [], past: [] });
-  const [loyaltyData, setLoyaltyData] = useState([]);
-  const [availableServices, setAvailableServices] = useState([]);
 
   // Form states
   const [profileForm, setProfileForm] = useState({});
@@ -64,27 +61,13 @@ export default function Profile() {
         state: profileData?.state || "",
         age_bracket: profileData?.age_bracket || null,
         gender: profileData?.gender || null,
-        preferred_services: profileData?.preferred_services || [],
       });
-
-      // Load available services for preferred_services dropdown
-      try {
-        const services = await getAvailableServices();
-        setAvailableServices(services || []);
-      } catch (err) {
-        console.error("Failed to load services:", err);
-        setAvailableServices([]);
-      }
 
       // Load customer-specific data only for customers
       if (isCustomer) {
         try {
-          const [appointmentsData, loyaltyDataRes] = await Promise.all([
-            listUserAppointments(),
-            getCustomerPoints(),
-          ]);
+          const appointmentsData = await listUserAppointments();
           setAppointments(appointmentsData || { upcoming: [], past: [] });
-          setLoyaltyData(loyaltyDataRes || []);
         } catch (err) {
           console.error("Failed to load customer data:", err);
         }
@@ -140,14 +123,26 @@ export default function Profile() {
       if (profileForm.state !== undefined) updateData.state = profileForm.state || null;
       if (profileForm.age_bracket !== undefined) updateData.age_bracket = profileForm.age_bracket || null;
       if (profileForm.gender !== undefined) updateData.gender = profileForm.gender || null;
-      if (profileForm.preferred_services !== undefined) {
-        updateData.preferred_services = Array.isArray(profileForm.preferred_services) 
-          ? profileForm.preferred_services 
-          : [];
-      }
 
       const result = await updateUserProfile(updateData);
       setProfile({ ...profile, ...result });
+      
+      // Update user in auth context so header reflects changes immediately
+      if (updateUser && result) {
+        // Merge updated fields with existing user data
+        updateUser({
+          first_name: result.first_name !== undefined ? result.first_name : profile?.first_name,
+          last_name: result.last_name !== undefined ? result.last_name : profile?.last_name,
+          phone: result.phone !== undefined ? result.phone : profile?.phone,
+          profile_image_url: result.profile_image_url !== undefined ? result.profile_image_url : profile?.profile_image_url,
+          date_of_birth: result.date_of_birth !== undefined ? result.date_of_birth : profile?.date_of_birth,
+          city: result.city !== undefined ? result.city : profile?.city,
+          state: result.state !== undefined ? result.state : profile?.state,
+          age_bracket: result.age_bracket !== undefined ? result.age_bracket : profile?.age_bracket,
+          gender: result.gender !== undefined ? result.gender : profile?.gender,
+        });
+      }
+      
       setIsEditingProfile(false);
       setSuccessMessage("Profile updated successfully!");
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -192,19 +187,11 @@ export default function Profile() {
       state: profile?.state || "",
       age_bracket: profile?.age_bracket || null,
       gender: profile?.gender || null,
-      preferred_services: profile?.preferred_services || [],
     });
     setIsEditingProfile(false);
     setError(null);
   }
 
-  function togglePreferredService(serviceName) {
-    const current = profileForm.preferred_services || [];
-    const updated = current.includes(serviceName)
-      ? current.filter(s => s !== serviceName)
-      : [...current, serviceName];
-    setProfileForm({ ...profileForm, preferred_services: updated });
-  }
 
   if (loading) {
     return (
@@ -222,7 +209,7 @@ export default function Profile() {
   // Determine tabs based on role
   const tabs = ["profile"];
   if (isCustomer) {
-    tabs.push("history", "loyalty");
+    tabs.push("history");
   }
 
   return (
@@ -245,13 +232,10 @@ export default function Profile() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className={`grid w-full mb-8 ${tabs.length === 1 ? "grid-cols-1" : tabs.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+        <TabsList className={`grid w-full mb-8 ${tabs.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
           <TabsTrigger value="profile">Profile Info</TabsTrigger>
           {isCustomer && (
-            <>
-              <TabsTrigger value="history">Visit History</TabsTrigger>
-              <TabsTrigger value="loyalty">Loyalty Points</TabsTrigger>
-            </>
+            <TabsTrigger value="history">Visit History</TabsTrigger>
           )}
         </TabsList>
 
@@ -427,65 +411,31 @@ export default function Profile() {
                   placeholder="Enter state"
                 />
               </div>
-
-              {/* Preferred Services - Multi-select */}
-              {isCustomer && (
-                <div className="md:col-span-2">
-                  <Label htmlFor="preferred_services">Preferred Services</Label>
-                  <div className="mt-2 p-4 border rounded-lg bg-gray-50 min-h-[100px]">
-                    {availableServices.length === 0 ? (
-                      <p className="text-sm text-gray-500">Loading services...</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {availableServices.map((service) => {
-                          const isSelected = (profileForm.preferred_services || []).includes(service);
-                          return (
-                            <button
-                              key={service}
-                              type="button"
-                              onClick={() => isEditingProfile && togglePreferredService(service)}
-                              disabled={!isEditingProfile}
-                              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                                isSelected
-                                  ? "bg-blue-600 text-white"
-                                  : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                              } ${!isEditingProfile ? "cursor-default" : "cursor-pointer"}`}
-                            >
-                              {service}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {isEditingProfile && (
-                      <p className="text-xs text-gray-500 mt-2">Click services to select/deselect your preferences</p>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Role-specific quick links */}
-            <div className="mt-6 pt-6 border-t">
-              <h3 className="text-lg font-semibold mb-3">Quick Links</h3>
-              <div className="flex flex-wrap gap-2">
-                {isOwner && (
-                  <Button variant="outline" onClick={() => navigate("/owner/dashboard")}>
-                    Salon Dashboard
-                  </Button>
-                )}
-                {isBarber && (
-                  <Button variant="outline" onClick={() => navigate("/schedule")}>
-                    My Schedule
-                  </Button>
-                )}
-                {isAdmin && (
-                  <Button variant="outline" onClick={() => navigate("/admin/dashboard")}>
-                    Admin Dashboard
-                  </Button>
-                )}
+            {(isOwner || isBarber || isAdmin) && (
+              <div className="mt-6 pt-6 border-t">
+                <h3 className="text-lg font-semibold mb-3">Quick Links</h3>
+                <div className="flex flex-wrap gap-2">
+                  {isOwner && (
+                    <Button variant="outline" onClick={() => navigate("/salon-dashboard")}>
+                      Salon Dashboard
+                    </Button>
+                  )}
+                  {isBarber && (
+                    <Button variant="outline" onClick={() => navigate("/schedule")}>
+                      My Schedule
+                    </Button>
+                  )}
+                  {isAdmin && (
+                    <Button variant="outline" onClick={() => navigate("/admin/dashboard")}>
+                      Admin Dashboard
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </Card>
         </TabsContent>
 
@@ -585,64 +535,6 @@ export default function Profile() {
           </TabsContent>
         )}
 
-        {/* Loyalty Points Tab - Customer Only */}
-        {isCustomer && (
-          <TabsContent value="loyalty" className="space-y-6">
-            <Card className="p-6">
-              <h2 className="text-2xl font-semibold mb-6">Loyalty Points Summary</h2>
-
-              {loyaltyData && loyaltyData.length > 0 ? (
-                <div className="space-y-6">
-                  {loyaltyData.map((salon) => (
-                    <div key={salon.salon_id} className="border-b pb-6 last:border-b-0">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-xl font-semibold">{salon.salon_name}</h3>
-                        <div className="text-center">
-                          <p className="text-3xl font-bold text-blue-600">{salon.balance}</p>
-                          <p className="text-sm text-gray-500">Points Available</p>
-                        </div>
-                      </div>
-
-                      {salon.activity && salon.activity.length > 0 && (
-                        <div>
-                          <h4 className="font-medium mb-3">Recent Activity</h4>
-                          <div className="space-y-2">
-                            {salon.activity.slice(0, 5).map((activity) => (
-                              <div
-                                key={activity.id}
-                                className="flex justify-between items-center p-3 bg-gray-50 rounded"
-                              >
-                                <div>
-                                  <p className="text-sm font-medium">{activity.description}</p>
-                                  <p className="text-xs text-gray-500">
-                                    {new Date(activity.date).toLocaleDateString()}
-                                  </p>
-                                </div>
-                                <div
-                                  className={`font-semibold ${
-                                    activity.type === "earned" ? "text-green-600" : "text-red-600"
-                                  }`}
-                                >
-                                  {activity.type === "earned" ? "+" : "-"}
-                                  {activity.points}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 text-gray-500">
-                  <p>No loyalty points yet.</p>
-                  <p className="text-sm mt-2">Complete appointments to start earning points!</p>
-                </div>
-              )}
-            </Card>
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );

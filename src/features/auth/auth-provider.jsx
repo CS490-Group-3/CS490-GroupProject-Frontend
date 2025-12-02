@@ -7,6 +7,14 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true); // Add loading state
 
+  // Update user data (e.g., after profile update)
+  const updateUser = (updatedUserData) => {
+    setUser((prevUser) => {
+      if (!prevUser) return updatedUserData;
+      return { ...prevUser, ...updatedUserData };
+    });
+  };
+
   const login = async (email, password) => {
     const res = await fetch(`${import.meta.env.VITE_API}/auth/login`, {
       method: "POST",
@@ -102,7 +110,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthCtx.Provider value={{ user, login, logout, loading }}>
+    <AuthCtx.Provider value={{ user, login, logout, loading, updateUser }}>
       {children}
     </AuthCtx.Provider>
   );

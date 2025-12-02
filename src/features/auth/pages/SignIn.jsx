@@ -77,8 +77,8 @@ export default function SignIn() {
       // Role-based redirect
       const redirectPaths = {
         customer: "/browse",
-        owner: "/owner/dashboard",
-        salon_owner: "/owner/dashboard",
+        owner: "/salon-dashboard",
+        salon_owner: "/salon-dashboard",
         barber: "/schedule",
         admin: "/admin/dashboard",
       };

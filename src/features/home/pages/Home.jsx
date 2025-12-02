@@ -25,8 +25,8 @@ export default function Home() {
     if (user) {
       const roleRedirects = {
         customer: "/browse",
-        owner: "/owner/dashboard",
-        salon_owner: "/owner/dashboard",
+        owner: "/salon-dashboard",
+        salon_owner: "/salon-dashboard",
         barber: "/schedule",
         admin: "/admin/dashboard",
       };
