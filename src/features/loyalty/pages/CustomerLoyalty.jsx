@@ -208,28 +208,40 @@ export default function Loyalty() {
       {selectedSalon ? (
         <>
           {/* Points Balance Card */}
-          <div className="bg-white border rounded-2xl p-5">
-            <div className="text-center py-8">
+          <div className="bg-white border rounded-2xl p-6">
+            <div className="text-center py-6">
               <div className="text-sm text-gray-600 mb-2">{selectedSalon.salon_name || "Salon"}</div>
               <div className="text-5xl font-bold text-gray-900 mb-2">{currentBalance}</div>
-              <div className="text-lg text-gray-600">Loyalty Points</div>
-              <p className="text-sm text-gray-500 mt-2">Points earned at this salon only</p>
+              <div className="text-lg text-gray-600 mb-4">Loyalty Points</div>
+              <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t">
+                <div>
+                  <div className="text-sm text-gray-500">Lifetime Earned</div>
+                  <div className="text-lg font-semibold text-gray-900">{selectedSalon.lifetime_points_earned || 0}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-500">Lifetime Redeemed</div>
+                  <div className="text-lg font-semibold text-gray-900">{selectedSalon.lifetime_points_redeemed || 0}</div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-4">Points are salon-specific and cannot be transferred</p>
             </div>
           </div>
 
       {/* Available Reward */}
-      <div className="bg-white border rounded-2xl p-5">
+      <div className="bg-white border rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Reward</h2>
         {rewards && rewards.pointThreshold && rewards.rewardDiscount ? (
           <div
             className={`rounded-xl border p-6 ${
               currentBalance >= rewards.pointThreshold
-                ? "bg-white border-gray-300"
-                : "bg-gray-50 border-gray-200 opacity-60"
+                ? "bg-green-50 border-green-300"
+                : "bg-gray-50 border-gray-200"
             }`}
           >
             <div className="text-center mb-4">
-              <div className="text-3xl font-bold text-gray-900 mb-2">
+              <div className={`text-3xl font-bold mb-2 ${
+                currentBalance >= rewards.pointThreshold ? "text-green-700" : "text-gray-900"
+              }`}>
                 {rewards.rewardDiscount}% Off
               </div>
               <div className="text-sm text-gray-600">
@@ -241,14 +253,26 @@ export default function Loyalty() {
                 <span>Your points at {selectedSalon.salon_name || "this salon"}</span>
                 <span className="font-semibold">{currentBalance} / {rewards.pointThreshold}</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
                 <div
-                  className="bg-indigo-600 h-2 rounded-full transition-all"
+                  className={`h-3 rounded-full transition-all ${
+                    currentBalance >= rewards.pointThreshold ? "bg-green-600" : "bg-indigo-600"
+                  }`}
                   style={{
                     width: `${Math.min((currentBalance / rewards.pointThreshold) * 100, 100)}%`,
                   }}
                 />
               </div>
+              {currentBalance < rewards.pointThreshold && (
+                <div className="text-xs text-gray-500 text-center">
+                  {rewards.pointThreshold - currentBalance} more points needed to redeem
+                </div>
+              )}
+              {currentBalance >= rewards.pointThreshold && (
+                <div className="text-xs text-green-600 text-center font-medium">
+                  ✓ You're eligible to redeem!
+                </div>
+              )}
             </div>
             <Button
               onClick={handleRedeem}
@@ -266,7 +290,7 @@ export default function Loyalty() {
         ) : (
           <div className="text-center py-8 text-gray-500">
             <p>No reward configured yet</p>
-            <p className="text-sm mt-1">Check back later for available rewards</p>
+            <p className="text-sm mt-1">This salon hasn't set up a loyalty program yet</p>
           </div>
         )}
       </div>
@@ -281,25 +305,47 @@ export default function Loyalty() {
                   <p className="text-sm mt-1">Your points history for {selectedSalon.salon_name || "this salon"} will appear here</p>
                 </div>
               ) : (
-                currentActivity.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between rounded-xl border px-4 py-3 bg-white"
-              >
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900">{item.description}</div>
-                  <div className="text-sm text-gray-500">{item.date}</div>
-                </div>
-                <div
-                  className={`text-lg font-semibold ${
-                    item.type === "earned" ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {item.type === "earned" ? "+" : ""}
-                  {item.points} pts
-                </div>
-              </div>
-                ))
+                currentActivity.map((item) => {
+                  // Format date nicely
+                  let formattedDate = item.date;
+                  if (item.date) {
+                    try {
+                      const date = new Date(item.date);
+                      if (!isNaN(date.getTime())) {
+                        formattedDate = date.toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true
+                        });
+                      }
+                    } catch (e) {
+                      // Keep original if parsing fails
+                    }
+                  }
+                  
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between rounded-xl border px-4 py-3 bg-white"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">{item.description}</div>
+                        <div className="text-sm text-gray-500">{formattedDate}</div>
+                      </div>
+                      <div
+                        className={`text-lg font-semibold ${
+                          item.type === "earned" ? "text-green-600" : "text-red-600"
+                        }`}
+                      >
+                        {item.type === "earned" ? "+" : ""}
+                        {item.points} pts
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

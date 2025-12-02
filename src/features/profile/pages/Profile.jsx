@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../shared/ui/tab
 import { Badge } from "../../../shared/ui/badge.jsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../shared/ui/select.jsx";
 import { ImageWithFallback } from "../../../shared/ui/ImageWithFallback.jsx";
+import SavedPaymentMethods from "../../payments/pages/SavedPaymentMethods.jsx";
 
 const AGE_BRACKETS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
 const GENDERS = ["male", "female", "non-binary", "prefer-not-to-say", "other"];
@@ -312,6 +313,7 @@ export default function Profile() {
   const tabs = ["profile"];
   if (isCustomer) {
     tabs.push("history");
+    tabs.push("payment-methods");
   }
 
   return (
@@ -334,10 +336,13 @@ export default function Profile() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className={`grid w-full mb-8 ${tabs.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+        <TabsList className={`grid w-full mb-8 ${tabs.length === 1 ? "grid-cols-1" : tabs.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
           <TabsTrigger value="profile">Profile Info</TabsTrigger>
           {isCustomer && (
-            <TabsTrigger value="history">Visit History</TabsTrigger>
+            <>
+              <TabsTrigger value="history">Visit History</TabsTrigger>
+              <TabsTrigger value="payment-methods">Payment Methods</TabsTrigger>
+            </>
           )}
         </TabsList>
 
@@ -677,6 +682,13 @@ export default function Profile() {
                 </div>
               </Card>
             )}
+          </TabsContent>
+        )}
+
+        {/* Payment Methods Tab - Customer Only */}
+        {isCustomer && (
+          <TabsContent value="payment-methods" className="space-y-6">
+            <SavedPaymentMethods />
           </TabsContent>
         )}
 
