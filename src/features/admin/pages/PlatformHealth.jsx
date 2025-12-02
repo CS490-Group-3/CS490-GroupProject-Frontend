@@ -6,8 +6,8 @@ import { Input } from "../../../shared/ui/input";
 import { Label } from "../../../shared/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../shared/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../shared/ui/tabs";
-import { Activity, Server, Database, CheckCircle, Clock, AlertCircle, RefreshCw, FileText } from "lucide-react";
-import { getHealthStatus, getErrorLogs } from "../api.js";
+import { Activity, Server, Database, CheckCircle, Clock, AlertCircle, RefreshCw, FileText, Download } from "lucide-react";
+import { getHealthStatus, getErrorLogs, exportErrorLogsCSV } from "../api.js";
 
 export default function PlatformHealth() {
   const [healthStatus, setHealthStatus] = useState(null);
@@ -63,6 +63,20 @@ export default function PlatformHealth() {
       setErrorLogs([]);
     } finally {
       setErrorLogsLoading(false);
+    }
+  };
+
+  const handleExportErrorLogs = async () => {
+    try {
+      await exportErrorLogsCSV(
+        errorFilters.limit,
+        errorFilters.severity || null,
+        errorFilters.startDate || null,
+        errorFilters.endDate || null
+      );
+    } catch (err) {
+      console.error("Failed to export error logs CSV:", err);
+      alert("Failed to export error logs CSV. Please try again.");
     }
   };
 
@@ -186,9 +200,22 @@ export default function PlatformHealth() {
         </TabsList>
         <TabsContent value="errors" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Error Logs</CardTitle>
-              <CardDescription>Monitor and filter application errors</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+              <div>
+                <CardTitle>Error Logs</CardTitle>
+                <CardDescription>Monitor and filter application errors</CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={handleExportErrorLogs}
+                disabled={errorLogsLoading}
+                className="inline-flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Export CSV</span>
+                <span className="sm:hidden">Export</span>
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-4 gap-4">

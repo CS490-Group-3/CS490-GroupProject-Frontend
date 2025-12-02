@@ -5,8 +5,8 @@ import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
 import { Label } from "../../../shared/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../shared/ui/select";
-import { Clock, RefreshCw, FileText, Database, User, Calendar } from "lucide-react";
-import { getAuditLogs } from "../api.js";
+import { Clock, RefreshCw, FileText, Database, User, Calendar, Download } from "lucide-react";
+import { getAuditLogs, exportAuditLogsCSV } from "../api.js";
 
 export default function AuditLogs() {
   const [auditLogs, setAuditLogs] = useState([]);
@@ -43,6 +43,23 @@ export default function AuditLogs() {
       setAuditLogs([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      await exportAuditLogsCSV(
+        filters.limit,
+        filters.tableName || null,
+        filters.recordId || null,
+        filters.action || null,
+        filters.changedBy || null,
+        filters.startDate || null,
+        filters.endDate || null
+      );
+    } catch (err) {
+      console.error("Failed to export audit logs CSV:", err);
+      alert("Failed to export audit logs CSV. Please try again.");
     }
   };
 
@@ -166,6 +183,15 @@ export default function AuditLogs() {
               }}
             >
               Clear Filters
+            </Button>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={handleExportCSV}
+              disabled={loading}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
             </Button>
           </div>
         </CardContent>

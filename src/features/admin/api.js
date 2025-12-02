@@ -84,35 +84,6 @@ export async function exportMetricsCSV(metricsType, startDate = null, endDate = 
   document.body.removeChild(a);
 }
 
-export async function exportMetricsPDF(metricsType, startDate = null, endDate = null) {
-  const token = localStorage.getItem("access_token");
-  const params = new URLSearchParams();
-  if (startDate) params.append("start_date", startDate);
-  if (endDate) params.append("end_date", endDate);
-  const query = params.toString();
-  
-  const response = await fetch(`${import.meta.env.VITE_API}/admin/metrics/${metricsType}/export/pdf${query ? `?${query}` : ""}`, {
-    headers: {
-      "Authorization": token ? `Bearer ${token}` : "",
-    },
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText);
-  }
-  
-  const blob = await response.blob();
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `metrics_${metricsType}_${new Date().toISOString().split("T")[0]}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
-}
-
 // Platform Health
 export async function getHealthStatus() {
   return api("/health");
@@ -128,6 +99,40 @@ export async function getErrorLogs(limit = 100, severity = null, startDate = nul
   return api(`/admin/error-logs?${params.toString()}`);
 }
 
+export async function exportErrorLogsCSV(limit = 1000, severity = null, startDate = null, endDate = null) {
+  const token = localStorage.getItem("access_token");
+  const params = new URLSearchParams();
+  params.append("limit", limit);
+  if (severity) params.append("severity", severity);
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
+  const query = params.toString();
+
+  const response = await fetch(
+    `${import.meta.env.VITE_API}/admin/error-logs/export/csv?${query}`,
+    {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `error_logs_${new Date().toISOString().split("T")[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
 // Audit Logs
 export async function getAuditLogs(limit = 100, tableName = null, recordId = null, action = null, changedBy = null, startDate = null, endDate = null) {
   const params = new URLSearchParams();
@@ -141,6 +146,43 @@ export async function getAuditLogs(limit = 100, tableName = null, recordId = nul
   return api(`/admin/audit-logs?${params.toString()}`);
 }
 
+export async function exportAuditLogsCSV(limit = 1000, tableName = null, recordId = null, action = null, changedBy = null, startDate = null, endDate = null) {
+  const token = localStorage.getItem("access_token");
+  const params = new URLSearchParams();
+  params.append("limit", limit);
+  if (tableName) params.append("table_name", tableName);
+  if (recordId) params.append("record_id", recordId);
+  if (action) params.append("action", action);
+  if (changedBy) params.append("changed_by", changedBy);
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
+  const query = params.toString();
+
+  const response = await fetch(
+    `${import.meta.env.VITE_API}/admin/audit-logs/export/csv?${query}`,
+    {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `audit_logs_${new Date().toISOString().split("T")[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
 // Platform Metrics Calculation
 export async function calculatePlatformMetrics(date = null) {
   const body = date ? JSON.stringify({ date }) : null;
@@ -148,4 +190,50 @@ export async function calculatePlatformMetrics(date = null) {
     method: "POST",
     body: body,
   });
+}
+
+export async function calculateDailyStatistics(date = null) {
+  const body = date ? JSON.stringify({ date }) : null;
+  return api("/admin/metrics/daily-statistics/calculate", {
+    method: "POST",
+    body: body,
+  });
+}
+
+export async function getDailyStatistics(startDate, endDate) {
+  return api(
+    `/admin/daily-statistics?start_date=${startDate}&end_date=${endDate}`
+  );
+}
+
+export async function exportDailyStatisticsCSV(startDate, endDate) {
+  const token = localStorage.getItem("access_token");
+  const params = new URLSearchParams();
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
+  const query = params.toString();
+
+  const response = await fetch(
+    `${import.meta.env.VITE_API}/admin/daily-statistics/export/csv?${query}`,
+    {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `daily_statistics_${new Date().toISOString().split("T")[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 }

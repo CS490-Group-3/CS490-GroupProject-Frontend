@@ -27,8 +27,10 @@ import {
   getRetentionMetrics,
   getPlatformMetrics,
   getDemographics,
+  calculateDailyStatistics,
+  getDailyStatistics,
   exportMetricsCSV,
-  exportMetricsPDF,
+  exportDailyStatisticsCSV,
 } from "../api.js";
 
 export default function AdminAnalytics() {
@@ -49,6 +51,7 @@ export default function AdminAnalytics() {
     retention: null,
     platform: null,
     demographics: null,
+    daily: null,
   });
 
   // Sync activeTab with URL param
@@ -101,6 +104,18 @@ export default function AdminAnalytics() {
             .catch((err) => {
               console.error("Failed to load demographics:", err);
               return { key: "demographics", data: null };
+            })
+        );
+      } else if (activeTab === "daily") {
+        metricsPromises.push(
+          getDailyStatistics(startDate, endDate)
+            .then((data) => ({
+              key: "daily",
+              data: data?.daily_statistics?.rows || data?.rows || [],
+            }))
+            .catch((err) => {
+              console.error("Failed to load daily statistics:", err);
+              return { key: "daily", data: [] };
             })
         );
       } else {
@@ -184,15 +199,30 @@ export default function AdminAnalytics() {
     }
   };
 
-  const handleExport = async (format) => {
+  const handleExport = async () => {
     try {
       const { startDate, endDate } = dateRange;
-      const metricsType = activeTab === "all" ? "platform" : activeTab;
-      const exportFn = format === "csv" ? exportMetricsCSV : exportMetricsPDF;
-      await exportFn(metricsType, startDate, endDate);
+      if (activeTab === "daily") {
+        await exportDailyStatisticsCSV(startDate, endDate);
+      } else {
+        // Map current tab to a valid backend metrics_type
+        const exportableTabs = [
+          "platform",
+          "engagement",
+          "appointments",
+          "revenue",
+          "loyalty",
+          "retention",
+          "demographics",
+        ];
+        const metricsType = exportableTabs.includes(activeTab)
+          ? activeTab
+          : "engagement";
+        await exportMetricsCSV(metricsType, startDate, endDate);
+      }
     } catch (error) {
-      console.error(`Failed to export ${format}:`, error);
-      alert(`Failed to export ${format.toUpperCase()}. Please try again.`);
+      console.error("Failed to export CSV:", error);
+      alert("Failed to export CSV. Please try again.");
     }
   };
 
@@ -238,13 +268,26 @@ export default function AdminAnalytics() {
           <p className="text-gray-600 mt-2">Platform performance and user engagement analytics</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => handleExport("csv")}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                const targetDate = dateRange.endDate;
+                await calculateDailyStatistics(targetDate || undefined);
+                alert("Daily statistics recalculated successfully.");
+              } catch (err) {
+                console.error("Failed to recalculate daily statistics:", err);
+                alert("Failed to recalculate daily statistics.");
+              }
+            }}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Recalculate Daily Stats
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
             Export CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
-            <Download className="h-4 w-4 mr-2" />
-            Export PDF
           </Button>
         </div>
       </div>
@@ -302,7 +345,7 @@ export default function AdminAnalytics() {
           setSearchParams({ tab: value });
         }}
       >
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="platform">Platform</TabsTrigger>
           <TabsTrigger value="engagement">Engagement</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
@@ -310,6 +353,7 @@ export default function AdminAnalytics() {
           <TabsTrigger value="demographics">Demographics</TabsTrigger>
           <TabsTrigger value="loyalty">Loyalty</TabsTrigger>
           <TabsTrigger value="retention">Retention</TabsTrigger>
+          <TabsTrigger value="daily">Daily Stats</TabsTrigger>
         </TabsList>
 
         <TabsContent value="platform" className="space-y-4">
@@ -445,6 +489,74 @@ export default function AdminAnalytics() {
               <CardContent className="py-12 text-center text-gray-500">
                 <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                 <p>No appointment metrics available for the selected date range.</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="daily" className="space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <Clock className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : metrics.daily && metrics.daily.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Daily Statistics</CardTitle>
+                <CardDescription>
+                  Raw per-day metrics for the selected period (platform-wide)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Date</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Total Appointments</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Completed</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Cancelled</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">New Customers</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Returning Customers</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Total Revenue</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Avg Rating</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Last Updated</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metrics.daily.map((row) => (
+                        <tr key={row.date} className="border-b last:border-b-0">
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {row.date ? new Date(row.date).toLocaleDateString() : "—"}
+                          </td>
+                          <td className="px-3 py-2">{row.total_appointments ?? "—"}</td>
+                          <td className="px-3 py-2">{row.completed_appointments ?? "—"}</td>
+                          <td className="px-3 py-2">{row.cancelled_appointments ?? "—"}</td>
+                          <td className="px-3 py-2">{row.new_customers ?? "—"}</td>
+                          <td className="px-3 py-2">{row.returning_customers ?? "—"}</td>
+                          <td className="px-3 py-2">
+                            {row.total_revenue != null ? `$${Number(row.total_revenue).toFixed(2)}` : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {row.average_rating != null ? Number(row.average_rating).toFixed(2) : "—"}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
+                            {row.created_at
+                              ? new Date(row.created_at).toLocaleString()
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center text-gray-500">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>No daily statistics found for the selected date range.</p>
               </CardContent>
             </Card>
           )}
