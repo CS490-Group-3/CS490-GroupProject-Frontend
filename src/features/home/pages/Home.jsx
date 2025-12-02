@@ -61,11 +61,16 @@ export default function Home() {
         {/* Navigation Bar */}
         <nav className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
-            <img
-              src={salonicaLogo}
-              alt="Salonica"
-              className="h-10 w-auto brightness-0 invert"
-            />
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center hover:opacity-80 transition-opacity"
+            >
+              <img
+                src={salonicaLogo}
+                alt="Salonica"
+                className="h-12 w-auto object-contain max-w-[140px] cursor-pointer"
+              />
+            </button>
             <div className="flex gap-4">
               <button
                 onClick={() => navigate("/auth/sign-in")}
@@ -98,7 +103,7 @@ export default function Home() {
             </p>
 
             {/* Search Bar */}
-            <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-8">
+            <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-8 relative z-10">
               <div className="flex gap-3 shadow-2xl">
                 <input
                   type="text"
@@ -109,7 +114,7 @@ export default function Home() {
                 />
                 <button
                   type="submit"
-                  className="px-8 py-4 bg-white text-purple-600 font-bold rounded-r-xl hover:bg-gray-50 transition-all"
+                  className="px-8 py-4 bg-white text-purple-600 font-bold rounded-r-xl hover:bg-gray-50 transition-all relative z-10"
                 >
                   Search
                 </button>
