@@ -494,6 +494,19 @@ export default function ProviderDashboard() {
                 <span className="px-3 py-1 bg-gray-800 text-white rounded text-sm font-medium">
                   ${appointment.price.toFixed(2)}
                 </span>
+                {appointment.payment_status && (
+                  <span className={`px-3 py-1 rounded text-sm font-medium ${
+                    appointment.payment_status === "completed" ? "bg-green-100 text-green-700" : 
+                    appointment.payment_status === "pending" ? "bg-yellow-100 text-yellow-700" : 
+                    appointment.payment_status === "failed" ? "bg-red-100 text-red-700" : 
+                    "bg-gray-100 text-gray-700"
+                  }`}>
+                    {appointment.payment_status === "completed" ? "✓ Paid" : 
+                     appointment.payment_status === "pending" ? "Pending" : 
+                     appointment.payment_status === "failed" ? "Failed" : 
+                     appointment.payment_status}
+                  </span>
+                )}
                 <span className={`px-3 py-1 rounded text-sm font-medium capitalize ${badgeClass}`}>
                   {appointment.status.replace("_", " ")}
                 </span>

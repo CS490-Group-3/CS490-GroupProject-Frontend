@@ -356,6 +356,19 @@ export default function Customers() {
                                   ${Number(service.price).toFixed(2)}
                                 </div>
                               )}
+                              {apt.payment_status && (
+                                <div className={`text-sm font-medium ${
+                                  apt.payment_status === "completed" ? "text-green-600" : 
+                                  apt.payment_status === "pending" ? "text-yellow-600" : 
+                                  apt.payment_status === "failed" ? "text-red-600" : 
+                                  "text-gray-600"
+                                }`}>
+                                  Payment: {apt.payment_status === "completed" ? "✓ Paid" : 
+                                           apt.payment_status === "pending" ? "Pending" : 
+                                           apt.payment_status === "failed" ? "Failed" : 
+                                           apt.payment_status}
+                                </div>
+                              )}
                               {service.duration_minutes && (
                                 <div className="text-gray-500">
                                   Duration: {service.duration_minutes} minutes

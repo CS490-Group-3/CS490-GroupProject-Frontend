@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../shared/ui/table.jsx";
-import { getPaymentHistory } from "../../loyalty/api.js";
+import { getPaymentHistory as getOwnerPaymentHistory } from "../../loyalty/api.js";
 
 export default function Payments() {
   const [payments, setPayments] = useState([]);
@@ -23,7 +23,7 @@ export default function Payments() {
       try {
         setLoading(true);
         setError("");
-        const data = await getPaymentHistory(
+        const data = await getOwnerPaymentHistory(
           dateFilter.start || null,
           dateFilter.end || null
         );

@@ -71,6 +71,24 @@ export default function AppointmentCard({
             }
           />
           <Row label="Status:" value={appt.status} />
+          {appt.payment_status && (
+            <Row 
+              label="Payment:" 
+              value={
+                <span className={`font-medium ${
+                  appt.payment_status === "completed" ? "text-green-600" : 
+                  appt.payment_status === "pending" ? "text-yellow-600" : 
+                  appt.payment_status === "failed" ? "text-red-600" : 
+                  "text-gray-600"
+                }`}>
+                  {appt.payment_status === "completed" ? "✓ Paid" : 
+                   appt.payment_status === "pending" ? "Pending" : 
+                   appt.payment_status === "failed" ? "Failed" : 
+                   appt.payment_status}
+                </span>
+              } 
+            />
+          )}
         </div>
       </div>
 

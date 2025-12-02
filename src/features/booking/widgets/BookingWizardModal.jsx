@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createAppointment, listAvailability, listEmployees } from "../api.js";
+import PaymentModal from "../../payments/components/PaymentModal.jsx";
 
 export default function BookingWizardModal({ salon, onClose }) {
   const [step, setStep] = useState(1);
@@ -58,54 +59,53 @@ export default function BookingWizardModal({ salon, onClose }) {
 
   const progress = useMemo(() => {
     if (result) return 100;
-    return Math.round((step / 4) * 100);
+    return Math.round((step / 5) * 100);
   }, [step, result]);
 
   const canNext =
     (step === 1 && !!employee) ||
     (step === 2 && !!service) ||
     (step === 3 && !!selectedSlot) ||
-    step === 4;
+    step === 4 ||
+    step === 5;
 
   function next() {
-    if (step < 4) setStep(step + 1);
+    if (step < 5) setStep(step + 1);
   }
 
   function back() {
-    if (step > 1) setStep(step - 1);
-  }
-
-  async function handleConfirm() {
-    if (!employee || !service || !selectedSlot) return;
-    setSaving(true);
-    setError("");
-    try {
-      const payload = {
-        barber_id: employee.id,
-        service_id: service.id,
-        salon_id: salon.id,
-        start_at: selectedSlot.start_at,
-        end_at: selectedSlot.end_at,
-        notes: note || undefined,
-      };
-      const created = await createAppointment(payload);
-      setResult(created);
-    } catch (err) {
-      setError(err.message || "Failed to create appointment.");
-    } finally {
-      setSaving(false);
+    if (step > 1) {
+      setStep(step - 1);
     }
   }
 
+  // Step 4 just moves to payment step - no appointment creation yet
+  function handleConfirm() {
+    if (!employee || !service || !selectedSlot) return;
+    // Just move to payment step
+    setStep(5);
+  }
+
+  // This is no longer used - payment form handles appointment creation
+  // Keeping for reference but not called
+
+  function handlePaymentSuccess(paymentResult) {
+    // Payment result includes the appointment that was created
+    const appointment = paymentResult.appointment || paymentResult;
+    // Show confirmation
+    setResult(appointment);
+  }
+
   return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute inset-x-0 top-10 mx-auto w-[min(960px,92vw)] rounded-2xl bg-white shadow-xl">
+    <>
+      <div className="fixed inset-0 z-50">
+        <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+        <div className="absolute inset-x-0 top-10 mx-auto w-[min(960px,92vw)] rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between p-4 border-b">
           <div>
             <div className="text-lg font-semibold">Book an Appointment</div>
             <div className="text-sm text-gray-600">
-              {result ? "Confirmed" : `Step ${step} of 4`}
+              {result ? "Confirmed" : `Step ${step} of 5`}
             </div>
           </div>
           <button onClick={onClose} className="rounded-md px-3 py-1 border hover:bg-gray-50">Close</button>
@@ -150,8 +150,16 @@ export default function BookingWizardModal({ salon, onClose }) {
                   note={note}
                   onNote={setNote}
                   error={error}
-                  saving={saving}
-                  onConfirm={handleConfirm}
+                />
+              )}
+              {step === 5 && (
+                <Step5Payment
+                  employee={employee}
+                  service={service}
+                  slot={selectedSlot}
+                  note={note}
+                  salon={salon}
+                  onPaymentSuccess={handlePaymentSuccess}
                 />
               )}
               {!result && (
@@ -174,13 +182,23 @@ export default function BookingWizardModal({ salon, onClose }) {
                       {step === 3 ? "Review" : "Continue"}
                     </button>
                   )}
+                  {step === 4 && (
+                    <button
+                      onClick={next}
+                      disabled={!canNext}
+                      className="w-48 rounded-xl bg-gray-900 text-white px-4 py-2 disabled:opacity-40"
+                    >
+                      Continue to Payment
+                    </button>
+                  )}
                 </div>
               )}
             </>
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -286,16 +304,17 @@ function Step3DateTime({ dateISO, onDateISO, slots, slot, onSelect, error }) {
   );
 }
 
-function Step4Review({ employee, service, slot, note, onNote, error, saving, onConfirm }) {
+function Step4Review({ employee, service, slot, note, onNote, error }) {
   const tz = slot?.timezone || "America/New_York";
   return (
     <div className="space-y-4">
-      <div className="font-medium">Review &amp; Confirm</div>
+      <div className="font-medium">Review Your Appointment</div>
       <div className="rounded-xl border p-4 text-sm text-gray-700 space-y-1">
         <div>• Barber: {employee?.name}</div>
         <div>• Service: {service?.name}</div>
         <div>• Date: {slot ? toReadable(slot.start_at, tz) : "--"}</div>
         <div>• Time: {slot ? formatTimeInTz(slot.start_at, tz) : "--"}</div>
+        <div>• Price: {service?.price != null ? `$${Number(service.price).toFixed(2)}` : "See salon"}</div>
       </div>
       <textarea
         value={note}
@@ -305,14 +324,64 @@ function Step4Review({ employee, service, slot, note, onNote, error, saving, onC
         className="w-full rounded-xl border px-3 py-2 bg-gray-50"
       />
       {error && <div className="text-sm text-rose-600">{error}</div>}
-      <button
-        onClick={onConfirm}
-        disabled={saving}
-        className="w-full rounded-xl bg-gray-900 text-white py-3 font-medium disabled:opacity-40"
-      >
-        {saving ? "Booking…" : "Confirm Appointment"}
-      </button>
+      <div className="text-sm text-gray-600">
+        Click "Continue to Payment" below to proceed. Your appointment will be created when you proceed with payment in the next step.
+      </div>
     </div>
+  );
+}
+
+function Step5Payment({ employee, service, slot, note, salon, onPaymentSuccess }) {
+  const amount = service?.price || 0;
+  const tz = slot?.timezone || "America/New_York";
+  const [showPaymentModal, setShowPaymentModal] = useState(true);
+
+  if (amount <= 0) {
+    return (
+      <div className="space-y-4 text-center">
+        <div className="font-medium">Payment</div>
+        <div className="text-sm text-gray-600">
+          This service doesn't have a price set. Please contact the salon to complete booking.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="font-medium">Complete Payment</div>
+        <div className="rounded-xl border p-4 text-sm text-gray-700 space-y-1">
+          <div>• Barber: {employee?.name}</div>
+          <div>• Service: {service?.name}</div>
+          <div>• Date: {slot ? toReadable(slot.start_at, tz) : "--"}</div>
+          <div>• Time: {slot ? formatTimeInTz(slot.start_at, tz) : "--"}</div>
+          <div>• Amount: ${Number(amount).toFixed(2)}</div>
+        </div>
+        <div className="text-sm text-gray-600">
+          Complete payment below to confirm your appointment. Your appointment will only be created after payment succeeds.
+        </div>
+      </div>
+      
+      <PaymentModal
+        open={showPaymentModal}
+        onOpenChange={(open) => {
+          setShowPaymentModal(open);
+          // If user closes without paying, they can retry
+        }}
+        appointmentData={{
+          barber_id: employee?.id,
+          service_id: service?.id,
+          salon_id: salon?.id,
+          start_at: slot?.start_at,
+          end_at: slot?.end_at,
+          notes: note || undefined
+        }}
+        amount={amount}
+        salonId={salon?.id}
+        onSuccess={onPaymentSuccess}
+      />
+    </>
   );
 }
 
@@ -325,9 +394,12 @@ function ConfirmationSummary({ appointment, onClose }) {
       </div>
       <h2 className="text-xl font-semibold text-gray-900">Appointment Confirmed</h2>
       <p className="text-sm text-gray-600">
-        We’ve scheduled your service for {toReadable(appointment.start_at, tz)} at{" "}
+        We've scheduled your service for {toReadable(appointment.start_at, tz)} at{" "}
         {formatTimeInTz(appointment.start_at, tz)}.
       </p>
+      <div className="text-sm text-green-600 font-medium">
+        Payment completed successfully
+      </div>
       <button
         onClick={onClose}
         className="w-full rounded-xl bg-gray-900 text-white py-3 font-medium hover:opacity-90"

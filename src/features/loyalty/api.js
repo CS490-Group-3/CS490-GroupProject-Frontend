@@ -1,29 +1,45 @@
 import { api } from "../../shared/api/client.js";
 
 // Get customer's current points balance and activity
-// NOTE: Loyalty points endpoint not visible in current API docs
-// Using mock data until backend implements it
 export async function getCustomerPoints() {
-  if (import.meta.env.VITE_MOCK === "1") {
-    return MOCK_CUSTOMER_POINTS;
+  try {
+    const response = await api("/loyalty/balance");
+    // Transform backend response to match frontend structure
+    const salonBalances = response.salon_balances || [];
+    return salonBalances.map(salon => ({
+      salon_id: salon.salon_id,
+      salon_name: salon.salon_name,
+      balance: salon.balance || 0,
+      lifetime_points_earned: salon.lifetime_points_earned || 0,
+      lifetime_points_redeemed: salon.lifetime_points_redeemed || 0,
+      activity: salon.activity || []
+    }));
+  } catch (error) {
+    console.error("Failed to fetch loyalty points:", error);
+    return [];
   }
-  // TODO: Backend needs to implement loyalty points API
-  // Falling back to mock data for now
-  return MOCK_CUSTOMER_POINTS;
 }
 
 // Get available loyalty rewards for a specific salon
 export async function getLoyaltyRewards(salonId = null) {
-  if (import.meta.env.VITE_MOCK === "1") {
-    return MOCK_REWARDS;
+  if (!salonId) {
+    throw new Error("salonId is required");
   }
-  if (salonId) {
-    return api(`/loyalty/rewards?salon_id=${salonId}`);
+  try {
+    const response = await api(`/loyalty/rewards?salon_id=${salonId}`);
+    return {
+      pointThreshold: response.pointThreshold || 100,
+      rewardDiscount: response.rewardDiscount || 10
+    };
+  } catch (error) {
+    console.error("Failed to fetch loyalty rewards:", error);
+    throw error;
   }
-  return api("/loyalty/rewards");
 }
 
 // Redeem points for a reward at a specific salon
+// Note: Actual redemption happens during payment creation
+// This endpoint just checks eligibility
 export async function redeemPoints(salonId) {
   if (import.meta.env.VITE_MOCK === "1") {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -35,10 +51,16 @@ export async function redeemPoints(salonId) {
       newBalance: (salon?.balance || 150) - threshold,
     };
   }
-  return api("/loyalty/redeem", {
-    method: "POST",
-    body: JSON.stringify({ salon_id: salonId }),
-  });
+  try {
+    const response = await api("/loyalty/redeem", {
+      method: "POST",
+      body: JSON.stringify({ salon_id: salonId }),
+    });
+    return response;
+  } catch (error) {
+    console.error("Failed to check redemption eligibility:", error);
+    throw error;
+  }
 }
 
 // Get owner's loyalty program configuration
@@ -46,7 +68,18 @@ export async function getLoyaltyConfig() {
   if (import.meta.env.VITE_MOCK === "1") {
     return MOCK_LOYALTY_CONFIG;
   }
-  return api("/owner/loyalty/config");
+  try {
+    const response = await api("/owner/loyalty/config");
+    return {
+      pointsPerDollar: response.pointsPerDollar || 1.0,
+      pointThreshold: response.pointThreshold || 100,
+      rewardDiscount: response.rewardDiscount || 10,
+      is_active: response.is_active !== false
+    };
+  } catch (error) {
+    console.error("Failed to fetch loyalty config:", error);
+    return MOCK_LOYALTY_CONFIG;
+  }
 }
 
 // Update owner's loyalty program configuration
@@ -59,10 +92,20 @@ export async function updateLoyaltyConfig(config) {
       config: { ...MOCK_LOYALTY_CONFIG, ...config },
     };
   }
-  return api("/owner/loyalty/config", {
-    method: "POST",
-    body: JSON.stringify(config),
-  });
+  try {
+    const response = await api("/owner/loyalty/config", {
+      method: "POST",
+      body: JSON.stringify({
+        pointsPerDollar: config.pointsPerDollar,
+        pointThreshold: config.pointThreshold,
+        rewardDiscount: config.rewardDiscount
+      }),
+    });
+    return response;
+  } catch (error) {
+    console.error("Failed to update loyalty config:", error);
+    throw error;
+  }
 }
 
 // Get owner's payment history
@@ -82,12 +125,18 @@ export async function getPaymentHistory(startDate = null, endDate = null) {
     return payments;
   }
   
-  const params = new URLSearchParams();
-  if (startDate) params.set("start_date", startDate);
-  if (endDate) params.set("end_date", endDate);
-  
-  const queryString = params.toString();
-  return api(`/owner/payments${queryString ? `?${queryString}` : ""}`);
+  try {
+    const params = new URLSearchParams();
+    if (startDate) params.set("start_date", startDate);
+    if (endDate) params.set("end_date", endDate);
+    
+    const queryString = params.toString();
+    const response = await api(`/owner/payments${queryString ? `?${queryString}` : ""}`);
+    return Array.isArray(response) ? response : [];
+  } catch (error) {
+    console.error("Failed to fetch payment history:", error);
+    return [];
+  }
 }
 
 // Mock data - salon-specific balances
