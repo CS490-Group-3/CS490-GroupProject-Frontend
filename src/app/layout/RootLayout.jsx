@@ -7,10 +7,12 @@ export default function RootLayout() {
   const { user } = useAuth();
   const { pathname } = useLocation();
   const onAuth = pathname.startsWith("/auth/");
+  const isHome = pathname === "/" || pathname === "/home";
+  const noPadding = isHome || onAuth;
   return (
     <div className="min-h-screen flex flex-col">
       {!onAuth && user ? <Header /> : null}
-      <main className="flex-1 p-6">
+      <main className={`flex-1 ${noPadding ? "" : "p-6"}`}>
         <Suspense fallback={<div className="text-gray-500">Loading…</div>}>
           <Outlet />
         </Suspense>

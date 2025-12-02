@@ -30,8 +30,16 @@ export async function updateAvailability(updates) {
   });
 }
 
-export async function fetchAppointments() {
-  return api(APPOINTMENTS_BASE);
+// Generic appointments fetcher with filters + paging support
+export async function fetchAppointments(params = {}) {
+  const search = new URLSearchParams();
+  const { when, status, limit, page } = params;
+  if (when) search.set("when", when);
+  if (status) search.set("status", Array.isArray(status) ? status.join(",") : status);
+  if (limit) search.set("limit", String(limit));
+  if (page) search.set("page", String(page));
+  const qs = search.toString();
+  return api(`${APPOINTMENTS_BASE}${qs ? `?${qs}` : ""}`);
 }
 
 export async function patchAppointment(payload) {
