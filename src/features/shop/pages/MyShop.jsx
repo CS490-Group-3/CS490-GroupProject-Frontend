@@ -5,6 +5,60 @@ import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
 import { Label } from "../../../shared/ui/label";
 import { Textarea } from "../../../shared/ui/textarea";
+import * as shopApi from "../api.js";
+
+// Component to display product image - refreshes signed URL from filepath
+function ProductImage({ imageUrl, alt, className }) {
+  const [displayUrl, setDisplayUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    if (!imageUrl) {
+      setLoading(false);
+      return;
+    }
+    
+    // If it's already a signed URL (starts with http), use it directly
+    if (imageUrl.startsWith("http")) {
+      setDisplayUrl(imageUrl);
+      setLoading(false);
+      return;
+    }
+    
+    // It's a filepath, refresh it to get signed URL
+    setLoading(true);
+    shopApi.refreshProductImageUrl(imageUrl, "salon-products")
+      .then(res => {
+        setDisplayUrl(res.signed_url);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Error refreshing product image URL:", err);
+        setDisplayUrl(null);
+        setLoading(false);
+      });
+  }, [imageUrl]);
+  
+  if (loading) {
+    return (
+      <div className={`${className} bg-gray-200 flex items-center justify-center`}>
+        <Loader2 className="h-8 w-8 text-gray-400 animate-spin" />
+      </div>
+    );
+  }
+  
+  if (!displayUrl) {
+    return (
+      <div className={`${className} bg-gray-200 flex items-center justify-center`}>
+        <ImageIcon className="h-12 w-12 text-gray-400" />
+      </div>
+    );
+  }
+  
+  return (
+    <img src={displayUrl} alt={alt} className={className} />
+  );
+}
 
 export default function MyShop() {
   const [salonId, setSalonId] = useState(null);
@@ -19,23 +73,29 @@ export default function MyShop() {
     description: "",
     price: "",
     stock_quantity: "",
-    sku: "",
+    category_id: "",
     is_active: true,
-    image_url: null,
   });
   const [savingProduct, setSavingProduct] = useState(false);
   const [productImageFile, setProductImageFile] = useState(null);
   const [productImagePreview, setProductImagePreview] = useState(null);
   
+  // Categories state
+  const [categories, setCategories] = useState([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  
   // Promotions state
   const [promotions, setPromotions] = useState([]);
   const [showPromotionForm, setShowPromotionForm] = useState(false);
   const [newPromotion, setNewPromotion] = useState({
-    product_id: "",
-    discount_percent: "",
-    start_date: "",
-    end_date: "",
+    title: "",
     description: "",
+    discount_type: "percentage",
+    discount_value: "",
+    valid_from: "",
+    valid_until: "",
+    min_purchase_amount: "",
+    target_audience: "existing_customers",
   });
   const [savingPromotion, setSavingPromotion] = useState(false);
 
@@ -50,39 +110,92 @@ export default function MyShop() {
       const salonData = res.salon || null;
       
       if (salonData && salonData.id) {
-        setSalonId(salonData.id);
-        // TODO: Load products when endpoint is available
-        // const productsRes = await api(`/salons/${salonData.id}/products`);
-        // setProducts(productsRes.products || []);
+        const currentSalonId = salonData.id;
+        setSalonId(currentSalonId);
         
-        // Mock data for now
-        setProducts([
-          {
-            id: 1,
-            name: "Premium Hair Pomade",
-            description: "High-hold styling pomade for all hair types",
-            price: 24.99,
-            stock_quantity: 45,
-            sku: "POM-001",
-            is_active: true,
-            image_url: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400",
-          },
-          {
-            id: 2,
-            name: "Beard Oil - Sandalwood",
-            description: "Nourishing beard oil with natural sandalwood scent",
-            price: 18.99,
-            stock_quantity: 32,
-            sku: "BO-002",
-            is_active: true,
-            image_url: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=400",
-          },
-        ]);
+        // Load from localStorage first for instant display
+        const cachedProducts = loadProductsFromStorage(currentSalonId);
+        // Filter out inactive products from cache
+        const activeCachedProducts = cachedProducts.filter(p => p.is_active !== false);
+        if (activeCachedProducts.length > 0) {
+          // Use cached products directly - ProductImage component will refresh filepaths when displaying
+          setProducts(activeCachedProducts);
+        }
+        
+        // Then try to load from server (will update localStorage if successful)
+        await loadProducts(currentSalonId);
+        await loadCategories();
       }
     } catch (err) {
       console.error("Error loading salon:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load products from localStorage for a salon
+  const loadProductsFromStorage = (salonId) => {
+    try {
+      const storageKey = `products_${salonId}`;
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed;
+      }
+    } catch (err) {
+      console.error("Error loading products from storage:", err);
+    }
+    return [];
+  };
+
+  // Save products to localStorage for a salon
+  const saveProductsToStorage = (salonId, productsList) => {
+    try {
+      const storageKey = `products_${salonId}`;
+      localStorage.setItem(storageKey, JSON.stringify(productsList));
+    } catch (err) {
+      console.error("Error saving products to storage:", err);
+    }
+  };
+
+  const loadProducts = async (salonId) => {
+    try {
+      console.log("Loading products for salon:", salonId);
+      const res = await shopApi.listProducts(salonId);
+      console.log("Products response:", res);
+      const productsList = res.products || [];
+      console.log("Products list:", productsList);
+      
+      // Filter out inactive products (is_active: false)
+      const activeProducts = productsList.filter(p => p.is_active !== false);
+      
+      // IMPORTANT: Save raw products with filepaths to localStorage (never signed URLs)
+      // The backend returns filepaths in image_url - store them as-is
+      // Only save active products to localStorage
+      saveProductsToStorage(salonId, activeProducts);
+      
+      // For display, we'll use ProductImage component which refreshes filepaths automatically
+      // So we can just use the products as-is (the component will handle refreshing)
+      console.log("Active products loaded:", activeProducts);
+      setProducts(activeProducts);
+    } catch (err) {
+      console.error("Error loading products:", err);
+      console.error("Error details:", err.message, err.stack);
+      // If server fails, keep cached products (already loaded above)
+      // If no cached products, keep existing state
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      const res = await shopApi.listCategories();
+      setCategories(res.categories || []);
+    } catch (err) {
+      console.error("Error loading categories:", err);
+      setCategories([]);
+    } finally {
+      setLoadingCategories(false);
     }
   };
 
@@ -102,8 +215,18 @@ export default function MyShop() {
     e.preventDefault();
     if (!salonId) return;
     
+    // Validate field lengths
+    if (newProduct.name.length > 100) {
+      alert("Product name must be 100 characters or less");
+      return;
+    }
+    if (newProduct.description && newProduct.description.length > 500) {
+      alert("Product description must be 500 characters or less");
+      return;
+    }
+    
     const price = parseFloat(newProduct.price);
-    const stock = parseInt(newProduct.stock_quantity);
+    const stock = parseInt(newProduct.stock_quantity) || 0;
     
     if (isNaN(price) || price < 0) {
       alert("Please enter a valid price");
@@ -116,51 +239,95 @@ export default function MyShop() {
     
     setSavingProduct(true);
     try {
-      // TODO: Upload image first if productImageFile exists
-      // const imageUrl = await uploadProductImage(productImageFile);
-      
-      // TODO: Create product when endpoint is available
-      // const productData = {
-      //   salon_id: salonId,
-      //   name: newProduct.name,
-      //   description: newProduct.description || "",
-      //   price: price,
-      //   stock_quantity: stock,
-      //   sku: newProduct.sku || "",
-      //   is_active: newProduct.is_active,
-      //   image_url: imageUrl || productImagePreview,
-      // };
-      // const created = await api(`/salons/${salonId}/products`, {
-      //   method: "POST",
-      //   body: JSON.stringify(productData),
-      // });
-      
-      // Mock: Add to local state
-      const newId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
-      const createdProduct = {
-        id: newId,
-        ...newProduct,
-        price: price,
+      // Prepare product data (DO NOT include salon_id - backend adds it automatically)
+      const productData = {
+        name: newProduct.name.trim(),
+        price: String(price), // Backend expects string
         stock_quantity: stock,
-        image_url: productImagePreview || newProduct.image_url,
+        is_active: newProduct.is_active !== undefined ? newProduct.is_active : true,
       };
-      setProducts([...products, createdProduct]);
       
+      // Add optional fields only if they have values
+      if (newProduct.description && newProduct.description.trim()) {
+        productData.description = newProduct.description.trim();
+      }
+      
+      if (newProduct.category_id) {
+        productData.category_id = newProduct.category_id;
+      }
+      
+      // Add image file if provided - backend will handle upload via multipart/form-data
+      if (productImageFile) {
+        productData.image = productImageFile;
+      }
+      
+      // Create product with multipart/form-data (handles image upload automatically)
+      console.log("Creating product with data:", productData);
+      const created = await shopApi.createProduct(productData);
+      console.log("Product created response:", created);
+      
+      // Clear form first
       setNewProduct({
         name: "",
         description: "",
         price: "",
         stock_quantity: "",
-        sku: "",
+        category_id: "",
         is_active: true,
-        image_url: null,
       });
       setProductImageFile(null);
       setProductImagePreview(null);
       setShowProductForm(false);
+      
+      // Optimistically add the created product to the list immediately
+      // IMPORTANT: Keep the filepath (image_url) as-is, don't convert to signed URL here
+      // The signed URL will be generated when displaying in loadProducts
+      let optimisticProduct = null;
+      if (created.product) {
+        // Keep the filepath from backend - it will be refreshed when displaying
+        optimisticProduct = {
+          ...created.product,
+          // image_url is already the filepath from backend, keep it as-is
+        };
+        console.log("Adding product optimistically:", optimisticProduct);
+        
+        setProducts(prev => {
+          // Avoid duplicates
+          const exists = prev.some(p => p.id === optimisticProduct.id);
+          let updated;
+          if (exists) {
+            updated = prev.map(p => p.id === optimisticProduct.id ? optimisticProduct : p);
+          } else {
+            updated = [...prev, optimisticProduct];
+          }
+          // Save to localStorage immediately (with filepath, not signed URL)
+          saveProductsToStorage(salonId, updated);
+          return updated;
+        });
+      }
+      
       alert("Product added successfully!");
+      
+      // Try to reload products from server, but keep optimistic update if it fails
+      try {
+        await loadProducts(salonId);
+      } catch (reloadError) {
+        console.error("Error reloading products, keeping optimistic update:", reloadError);
+        // Product is already saved to localStorage, so it will persist
+      }
     } catch (error) {
-      alert("Failed to add product: " + (error.message || "Unknown error"));
+      console.error("Error adding product:", error);
+      let errorMessage = "Unknown error";
+      if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage = typeof error.error === "string" ? error.error : JSON.stringify(error.error);
+      } else if (error) {
+        errorMessage = JSON.stringify(error);
+      }
+      alert("Failed to add product: " + errorMessage);
     } finally {
       setSavingProduct(false);
     }
@@ -168,47 +335,56 @@ export default function MyShop() {
 
   const handleUpdateProduct = async (productId) => {
     if (!salonId || !editingProduct) return;
+    
+    // Validate field lengths
+    if (editingProduct.name && editingProduct.name.length > 100) {
+      alert("Product name must be 100 characters or less");
+      return;
+    }
+    if (editingProduct.description && editingProduct.description.length > 500) {
+      alert("Product description must be 500 characters or less");
+      return;
+    }
+    
     setSavingProduct(true);
     try {
-      const price = parseFloat(editingProduct.price);
-      const stock = parseInt(editingProduct.stock_quantity);
+      const updates = {};
       
-      // TODO: Update product when endpoint is available
-      // const productData = {
-      //   name: editingProduct.name,
-      //   description: editingProduct.description || "",
-      //   price: price,
-      //   stock_quantity: stock,
-      //   sku: editingProduct.sku || "",
-      //   is_active: editingProduct.is_active,
-      // };
-      // if (productImageFile) {
-      //   productData.image_url = await uploadProductImage(productImageFile);
-      // }
-      // await api(`/salons/${salonId}/products/${productId}`, {
-      //   method: "PATCH",
-      //   body: JSON.stringify(productData),
-      // });
+      // Only include fields that are being updated
+      if (editingProduct.name !== undefined) updates.name = editingProduct.name;
+      if (editingProduct.description !== undefined) updates.description = editingProduct.description || "";
+      if (editingProduct.price !== undefined) updates.price = String(parseFloat(editingProduct.price));
+      if (editingProduct.stock_quantity !== undefined) updates.stock_quantity = parseInt(editingProduct.stock_quantity);
+      if (editingProduct.category_id !== undefined) updates.category_id = editingProduct.category_id || null;
+      if (editingProduct.is_active !== undefined) updates.is_active = editingProduct.is_active;
       
-      // Mock: Update local state
-      setProducts(products.map(p => 
-        p.id === productId 
-          ? { 
-              ...p, 
-              ...editingProduct, 
-              price: price, 
-              stock_quantity: stock,
-              image_url: productImagePreview || editingProduct.image_url || p.image_url,
-            }
-          : p
-      ));
+      // If new image uploaded, include it (PR #62)
+      if (productImageFile) {
+        updates.image = productImageFile;
+      }
+      
+      await shopApi.updateProduct(productId, updates);
+      
+      // Reload products to get updated data
+      await loadProducts(salonId);
       
       setEditingProduct(null);
       setProductImageFile(null);
       setProductImagePreview(null);
       alert("Product updated successfully!");
     } catch (error) {
-      alert("Failed to update product: " + (error.message || "Unknown error"));
+      console.error("Error updating product:", error);
+      let errorMessage = "Unknown error";
+      if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage = typeof error.error === "string" ? error.error : JSON.stringify(error.error);
+      } else if (error) {
+        errorMessage = JSON.stringify(error);
+      }
+      alert("Failed to update product: " + errorMessage);
     } finally {
       setSavingProduct(false);
     }
@@ -220,16 +396,38 @@ export default function MyShop() {
     
     setSavingProduct(true);
     try {
-      // TODO: Delete product when endpoint is available
-      // await api(`/salons/${salonId}/products/${productId}`, {
-      //   method: "DELETE",
-      // });
+      // Backend doesn't have DELETE endpoint, so we deactivate instead
+      await shopApi.updateProduct(productId, { is_active: false });
       
-      // Mock: Remove from local state
-      setProducts(products.filter(p => p.id !== productId));
+      // Optimistically remove product from UI immediately
+      setProducts(prev => {
+        const filtered = prev.filter(p => p.id !== productId);
+        // Update localStorage to exclude the deleted product
+        saveProductsToStorage(salonId, filtered);
+        return filtered;
+      });
+      
       alert("Product deleted successfully!");
+      
+      // Reload products from server to ensure sync
+      try {
+        await loadProducts(salonId);
+      } catch (reloadError) {
+        console.error("Error reloading products after delete, but product already removed from UI:", reloadError);
+      }
     } catch (error) {
-      alert("Failed to delete product: " + (error.message || "Unknown error"));
+      console.error("Error deleting product:", error);
+      let errorMessage = "Unknown error";
+      if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage = typeof error.error === "string" ? error.error : JSON.stringify(error.error);
+      } else if (error) {
+        errorMessage = JSON.stringify(error);
+      }
+      alert("Failed to delete product: " + errorMessage);
     } finally {
       setSavingProduct(false);
     }
@@ -244,19 +442,23 @@ export default function MyShop() {
     }
     
     try {
-      // TODO: Update stock when endpoint is available
-      // await api(`/salons/${salonId}/products/${productId}/stock`, {
-      //   method: "PATCH",
-      //   body: JSON.stringify({ stock_quantity: stock }),
-      // });
+      await shopApi.updateProduct(productId, { stock_quantity: stock });
       
-      // Mock: Update local state
-      setProducts(products.map(p => 
-        p.id === productId ? { ...p, stock_quantity: stock } : p
-      ));
-      alert("Stock updated successfully!");
+      // Reload products to get updated data
+      await loadProducts(salonId);
     } catch (error) {
-      alert("Failed to update stock: " + (error.message || "Unknown error"));
+      console.error("Error updating stock:", error);
+      let errorMessage = "Unknown error";
+      if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage = typeof error.error === "string" ? error.error : JSON.stringify(error.error);
+      } else if (error) {
+        errorMessage = JSON.stringify(error);
+      }
+      alert("Failed to update stock: " + errorMessage);
     }
   };
 
@@ -264,58 +466,80 @@ export default function MyShop() {
     e.preventDefault();
     if (!salonId) return;
     
-    const discount = parseFloat(newPromotion.discount_percent);
+    const discount = parseFloat(newPromotion.discount_value);
     if (isNaN(discount) || discount < 0 || discount > 100) {
       alert("Please enter a valid discount percentage (0-100)");
       return;
     }
     
-    if (!newPromotion.start_date || !newPromotion.end_date) {
+    if (!newPromotion.valid_from || !newPromotion.valid_until) {
       alert("Please select start and end dates");
       return;
     }
     
-    if (new Date(newPromotion.start_date) >= new Date(newPromotion.end_date)) {
+    if (new Date(newPromotion.valid_from) >= new Date(newPromotion.valid_until)) {
       alert("End date must be after start date");
+      return;
+    }
+    
+    if (!newPromotion.title || !newPromotion.description) {
+      alert("Please provide a title and description for the promotion");
       return;
     }
     
     setSavingPromotion(true);
     try {
-      // TODO: Create promotion when endpoint is available
-      // const promotionData = {
-      //   product_id: newPromotion.product_id,
-      //   discount_percent: discount,
-      //   start_date: newPromotion.start_date,
-      //   end_date: newPromotion.end_date,
-      //   description: newPromotion.description || "",
-      // };
-      // await api(`/salons/${salonId}/promotions`, {
-      //   method: "POST",
-      //   body: JSON.stringify(promotionData),
-      // });
+      // Convert dates to ISO strings
+      const promotionData = {
+        title: newPromotion.title,
+        description: newPromotion.description,
+        discount_type: newPromotion.discount_type,
+        discount_value: discount,
+        valid_from: new Date(newPromotion.valid_from).toISOString(),
+        valid_until: new Date(newPromotion.valid_until).toISOString(),
+        target_audience: newPromotion.target_audience,
+      };
       
-      // Mock: Add to local state
-      const newId = promotions.length > 0 ? Math.max(...promotions.map(p => p.id)) + 1 : 1;
+      if (newPromotion.min_purchase_amount) {
+        promotionData.min_purchase_amount = parseFloat(newPromotion.min_purchase_amount);
+      }
+      
+      const result = await shopApi.createPromotion(salonId, promotionData);
+      
+      // Reload promotions (when endpoint is available)
+      // For now, add to local state
       const createdPromotion = {
-        id: newId,
+        id: result.offer_id,
         ...newPromotion,
-        discount_percent: discount,
-        product_name: products.find(p => p.id === parseInt(newPromotion.product_id))?.name || "Unknown",
+        discount_value: discount,
       };
       setPromotions([...promotions, createdPromotion]);
       
       setNewPromotion({
-        product_id: "",
-        discount_percent: "",
-        start_date: "",
-        end_date: "",
+        title: "",
         description: "",
+        discount_type: "percentage",
+        discount_value: "",
+        valid_from: "",
+        valid_until: "",
+        min_purchase_amount: "",
+        target_audience: "existing_customers",
       });
       setShowPromotionForm(false);
       alert("Promotion created successfully!");
     } catch (error) {
-      alert("Failed to create promotion: " + (error.message || "Unknown error"));
+      console.error("Error creating promotion:", error);
+      let errorMessage = "Unknown error";
+      if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage = typeof error.error === "string" ? error.error : JSON.stringify(error.error);
+      } else if (error) {
+        errorMessage = JSON.stringify(error);
+      }
+      alert("Failed to create promotion: " + errorMessage);
     } finally {
       setSavingPromotion(false);
     }
@@ -372,14 +596,6 @@ export default function MyShop() {
                   required
                 />
               </div>
-              <div>
-                <Label>SKU</Label>
-                <Input
-                  value={newProduct.sku}
-                  onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
-                  placeholder="Optional"
-                />
-              </div>
             </div>
             <div>
               <Label>Description</Label>
@@ -389,6 +605,21 @@ export default function MyShop() {
                 rows={3}
                 placeholder="Product description..."
               />
+            </div>
+            <div>
+              <Label>Category</Label>
+              <select
+                value={newProduct.category_id}
+                onChange={(e) => setNewProduct({ ...newProduct, category_id: e.target.value })}
+                className="w-full px-3 py-2 border rounded-md"
+              >
+                <option value="">No category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -448,9 +679,8 @@ export default function MyShop() {
                   description: "",
                   price: "",
                   stock_quantity: "",
-                  sku: "",
+                  category_id: "",
                   is_active: true,
-                  image_url: null,
                 });
                 setProductImageFile(null);
                 setProductImagePreview(null);
@@ -467,7 +697,7 @@ export default function MyShop() {
               No products yet. Add your first product above.
             </div>
           )}
-          {products.map((product) => (
+          {products.filter(product => product.is_active !== false).map((product) => (
             <div key={product.id} className="border rounded-xl p-4 bg-white">
               {editingProduct?.id === product.id ? (
                 <div className="space-y-3">
@@ -506,11 +736,19 @@ export default function MyShop() {
                     </div>
                   </div>
                   <div>
-                    <Label>SKU</Label>
-                    <Input
-                      value={editingProduct.sku || ""}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                    />
+                    <Label>Category</Label>
+                    <select
+                      value={editingProduct.category_id || ""}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, category_id: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-md"
+                    >
+                      <option value="">No category</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <Label>Product Image</Label>
@@ -547,13 +785,19 @@ export default function MyShop() {
                 </div>
               ) : (
                 <>
-                  {product.image_url && (
-                    <img src={product.image_url} alt={product.name} className="w-full h-48 object-cover rounded-lg mb-3" />
-                  )}
+                  <ProductImage
+                    imageUrl={product.image_url}
+                    alt={product.name}
+                    className="w-full h-48 object-cover rounded-lg mb-3"
+                  />
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
                       <h3 className="font-medium text-gray-900">{product.name}</h3>
-                      {product.sku && <p className="text-xs text-gray-500">SKU: {product.sku}</p>}
+                      {product.category_id && categories.find(c => c.id === product.category_id) && (
+                        <p className="text-xs text-indigo-600 mt-1">
+                          {categories.find(c => c.id === product.category_id).name}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-1">
                       <Button
@@ -630,20 +874,23 @@ export default function MyShop() {
         {showPromotionForm && (
           <form onSubmit={handleAddPromotion} className="mb-4 p-4 border rounded-lg space-y-4">
             <div>
-              <Label>Product *</Label>
-              <select
-                value={newPromotion.product_id}
-                onChange={(e) => setNewPromotion({ ...newPromotion, product_id: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
+              <Label>Promotion Title *</Label>
+              <Input
+                value={newPromotion.title}
+                onChange={(e) => setNewPromotion({ ...newPromotion, title: e.target.value })}
+                placeholder="e.g., Holiday Blowout Sale"
                 required
-              >
-                <option value="">Select a product</option>
-                {products.filter(p => p.is_active).map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name} - ${Number(product.price).toFixed(2)}
-                  </option>
-                ))}
-              </select>
+              />
+            </div>
+            <div>
+              <Label>Description *</Label>
+              <Textarea
+                value={newPromotion.description}
+                onChange={(e) => setNewPromotion({ ...newPromotion, description: e.target.value })}
+                rows={3}
+                placeholder="e.g., 20% off all services this weekend!"
+                required
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -653,38 +900,54 @@ export default function MyShop() {
                   min="0"
                   max="100"
                   step="0.1"
-                  value={newPromotion.discount_percent}
-                  onChange={(e) => setNewPromotion({ ...newPromotion, discount_percent: e.target.value })}
+                  value={newPromotion.discount_value}
+                  onChange={(e) => setNewPromotion({ ...newPromotion, discount_value: e.target.value })}
                   required
                 />
               </div>
               <div>
-                <Label>Start Date *</Label>
+                <Label>Min Purchase Amount ($)</Label>
                 <Input
-                  type="date"
-                  value={newPromotion.start_date}
-                  onChange={(e) => setNewPromotion({ ...newPromotion, start_date: e.target.value })}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newPromotion.min_purchase_amount}
+                  onChange={(e) => setNewPromotion({ ...newPromotion, min_purchase_amount: e.target.value })}
+                  placeholder="Optional"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Start Date & Time *</Label>
+                <Input
+                  type="datetime-local"
+                  value={newPromotion.valid_from}
+                  onChange={(e) => setNewPromotion({ ...newPromotion, valid_from: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label>End Date & Time *</Label>
+                <Input
+                  type="datetime-local"
+                  value={newPromotion.valid_until}
+                  onChange={(e) => setNewPromotion({ ...newPromotion, valid_until: e.target.value })}
                   required
                 />
               </div>
             </div>
             <div>
-              <Label>End Date *</Label>
-              <Input
-                type="date"
-                value={newPromotion.end_date}
-                onChange={(e) => setNewPromotion({ ...newPromotion, end_date: e.target.value })}
+              <Label>Target Audience *</Label>
+              <select
+                value={newPromotion.target_audience}
+                onChange={(e) => setNewPromotion({ ...newPromotion, target_audience: e.target.value })}
+                className="w-full px-3 py-2 border rounded-md"
                 required
-              />
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea
-                value={newPromotion.description}
-                onChange={(e) => setNewPromotion({ ...newPromotion, description: e.target.value })}
-                rows={2}
-                placeholder="Promotion description (optional)"
-              />
+              >
+                <option value="existing_customers">Existing Customers</option>
+                <option value="all_users">All Users</option>
+              </select>
             </div>
             <div className="flex gap-2">
               <Button type="submit" disabled={savingPromotion}>
@@ -694,11 +957,14 @@ export default function MyShop() {
               <Button type="button" variant="outline" onClick={() => {
                 setShowPromotionForm(false);
                 setNewPromotion({
-                  product_id: "",
-                  discount_percent: "",
-                  start_date: "",
-                  end_date: "",
+                  title: "",
                   description: "",
+                  discount_type: "percentage",
+                  discount_value: "",
+                  valid_from: "",
+                  valid_until: "",
+                  min_purchase_amount: "",
+                  target_audience: "existing_customers",
                 });
               }}>
                 Cancel
@@ -715,8 +981,8 @@ export default function MyShop() {
         ) : (
           <div className="space-y-3">
             {promotions.map((promo) => {
-              const startDate = new Date(promo.start_date);
-              const endDate = new Date(promo.end_date);
+              const startDate = new Date(promo.valid_from);
+              const endDate = new Date(promo.valid_until);
               const now = new Date();
               const isActive = now >= startDate && now <= endDate;
               const isUpcoming = now < startDate;
@@ -726,7 +992,7 @@ export default function MyShop() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-medium">{promo.product_name}</h4>
+                        <h4 className="font-medium">{promo.title || "Promotion"}</h4>
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                           isActive ? "bg-green-100 text-green-800" :
                           isUpcoming ? "bg-blue-100 text-blue-800" :
@@ -736,14 +1002,18 @@ export default function MyShop() {
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mb-2">
-                        {promo.discount_percent}% off
+                        {promo.discount_value}% off
+                        {promo.min_purchase_amount && ` (min $${Number(promo.min_purchase_amount).toFixed(2)})`}
                       </p>
                       {promo.description && (
                         <p className="text-xs text-gray-500 mb-2">{promo.description}</p>
                       )}
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-500 mb-1">
                         <Calendar className="h-3 w-3 inline mr-1" />
-                        {startDate.toLocaleDateString()} - {endDate.toLocaleDateString()}
+                        {startDate.toLocaleString()} - {endDate.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Target: {promo.target_audience === "existing_customers" ? "Existing Customers" : "All Users"}
                       </div>
                     </div>
                     <Button
