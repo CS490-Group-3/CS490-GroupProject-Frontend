@@ -14,12 +14,3 @@ build/
 backendtemp/
 CS490-GroupProject-Backend-dev/
 
-# Test coverage
-coverage/
-.nyc_output/
-test-results/
-playwright-report/
-playwright/.cache/
-
-# Vitest
-.vitest/
