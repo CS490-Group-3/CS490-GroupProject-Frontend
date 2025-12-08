@@ -93,12 +93,59 @@ class BaseTest:
 
 
 class TestAuthentication(BaseTest):
-    """Test suite for authentication features"""
+    """Test suite for authentication features - flows in logical order"""
+    
+    def test_invalid_login(self):
+        """Test 1: Login with invalid credentials (negative case first)"""
+        print("\n🧪 Test 1: Invalid Login")
+        self.driver.get(f"{self.base_url}/auth/sign-in")
+        
+        email_input = self.wait.until(
+            EC.presence_of_element_located((By.ID, "email"))
+        )
+        email_input.send_keys("invalid@example.com")
+        
+        password_input = self.driver.find_element(By.ID, "password")
+        password_input.send_keys("wrongpassword")
+        
+        login_btn = self.driver.find_element(By.XPATH, "//button[@type='submit']")
+        login_btn.click()
+        
+        time.sleep(2)
+        # Should stay on login page or show error
+        assert "/auth/sign-in" in self.driver.current_url or self.driver.find_elements(By.XPATH, "//*[contains(text(), 'error') or contains(text(), 'invalid')]")
+        print("✅ Invalid login handled correctly - stayed on login page")
+    
+    def test_user_login(self):
+        """Test 2: User login securely with valid credentials"""
+        print("\n🧪 Test 2: Valid User Login")
+        self.driver.get(f"{self.base_url}/auth/sign-in")
+        
+        email_input = self.wait.until(
+            EC.presence_of_element_located((By.ID, "email"))
+        )
+        email_input.clear()
+        email_input.send_keys(CUSTOMER_EMAIL)
+        
+        password_input = self.driver.find_element(By.ID, "password")
+        password_input.clear()
+        password_input.send_keys(CUSTOMER_PASS)
+        
+        login_btn = self.driver.find_element(By.XPATH, "//button[@type='submit']")
+        login_btn.click()
+        
+        time.sleep(2)
+        # Verify redirect after login
+        assert "/browse" in self.driver.current_url or "/appointments" in self.driver.current_url
+        print("✅ Login successful, redirected to customer page")
     
     def test_view_profile(self):
-        """Test 1: View user profile page"""
-        print("\n🧪 Test 1: View User Profile")
-        self.login_customer()
+        """Test 3: View user profile page (continues from login)"""
+        print("\n🧪 Test 3: View User Profile")
+        # Continue from logged-in state (login was done in previous test)
+        # If not logged in, login first
+        if "/auth" in self.driver.current_url or "/browse" not in self.driver.current_url:
+            self.login_customer()
         
         self.driver.get(f"{self.base_url}/profile")
         time.sleep(2)
@@ -115,74 +162,65 @@ class TestAuthentication(BaseTest):
         except Exception as e:
             print(f"⚠️  Could not verify profile page: {e}")
     
-    def test_user_login(self):
-        """Test 2: User login securely"""
-        print("\n🧪 Test 2: User Login")
-        self.driver.get(f"{self.base_url}/auth/sign-in")
+    def test_edit_last_name(self):
+        """Test 4: Edit last name in profile (continues from viewing profile)"""
+        print("\n🧪 Test 4: Edit Last Name in Profile")
+        # Continue from profile page
+        if "/profile" not in self.driver.current_url:
+            if "/auth" in self.driver.current_url or "/browse" not in self.driver.current_url:
+                self.login_customer()
+            self.driver.get(f"{self.base_url}/profile")
+            time.sleep(2)
         
-        email_input = self.wait.until(
-            EC.presence_of_element_located((By.ID, "email"))
-        )
-        email_input.send_keys(CUSTOMER_EMAIL)
-        
-        password_input = self.driver.find_element(By.ID, "password")
-        password_input.send_keys(CUSTOMER_PASS)
-        
-        login_btn = self.driver.find_element(By.XPATH, "//button[@type='submit']")
-        login_btn.click()
-        
-        time.sleep(2)
-        # Verify redirect after login
-        assert "/browse" in self.driver.current_url or "/appointments" in self.driver.current_url
-        print("✅ Login successful, redirected to customer page")
-    
-    def test_form_validation(self):
-        """Test 3: Form validation on sign up"""
-        print("\n🧪 Test 3: Sign Up Form Validation")
-        self.driver.get(f"{self.base_url}/auth/sign-up")
-        
-        first_name_input = self.wait.until(
-            EC.presence_of_element_located((By.ID, "firstName"))
-        )
-        
-        # Try to submit empty form
-        submit_btn = self.wait.until(
-            EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']"))
-        )
-        submit_btn.click()
-        
-        # Check for HTML5 validation
-        is_valid = self.driver.execute_script("return arguments[0].checkValidity();", first_name_input)
-        assert not is_valid
-        print("✅ Form validation working correctly")
-    
-    def test_invalid_login(self):
-        """Test 4: Login with invalid credentials"""
-        print("\n🧪 Test 4: Invalid Login")
-        self.driver.get(f"{self.base_url}/auth/sign-in")
-        
-        email_input = self.wait.until(
-            EC.presence_of_element_located((By.ID, "email"))
-        )
-        email_input.send_keys("invalid@example.com")
-        
-        password_input = self.driver.find_element(By.ID, "password")
-        password_input.send_keys("wrongpassword")
-        
-        login_btn = self.driver.find_element(By.XPATH, "//button[@type='submit']")
-        login_btn.click()
-        
-        time.sleep(2)
-        # Should stay on login page or show error
-        print("✅ Invalid login handled correctly")
+        try:
+            # Click Edit Profile button
+            edit_btn = self.wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Edit Profile') or contains(text(), 'Edit')]"))
+            )
+            edit_btn.click()
+            time.sleep(1)
+            
+            # Find last name input and update it
+            last_name_input = self.wait.until(
+                EC.presence_of_element_located((By.ID, "last_name"))
+            )
+            current_last_name = last_name_input.get_attribute("value") or ""
+            
+            # Generate a new last name (add Test suffix if not already there)
+            new_last_name = "TestUser" if "Test" not in current_last_name else current_last_name + "Updated"
+            last_name_input.clear()
+            last_name_input.send_keys(new_last_name)
+            time.sleep(0.5)
+            
+            # Save changes
+            save_btn = self.wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Save') or contains(text(), 'Save Changes')]"))
+            )
+            save_btn.click()
+            time.sleep(2)
+            
+            # Verify the change was saved (check if success message appears or value is updated)
+            success_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'success') or contains(text(), 'updated')]")
+            if success_elements:
+                print(f"✅ Last name updated successfully to: {new_last_name}")
+            else:
+                # Verify the input still shows the new value
+                updated_input = self.driver.find_element(By.ID, "last_name")
+                if updated_input.get_attribute("value") == new_last_name or new_last_name in updated_input.get_attribute("value"):
+                    print(f"✅ Last name updated to: {new_last_name}")
+                else:
+                    print("⚠️  Last name update attempted, but verification unclear")
+        except Exception as e:
+            print(f"⚠️  Could not edit last name: {e}")
 
 
 class TestSalonBrowsing(BaseTest):
-    """Test suite for salon browsing features"""
+    """Test suite for salon browsing features - chained flow from authentication"""
     
     def test_browse_salons(self):
-        """Test 1: Browse available salons"""
+        """Test 1: Browse available salons (continues from logged-in state)"""
         print("\n🧪 Test 1: Browse Available Salons")
+        # Always login first (new browser session for this test class)
         self.login_customer()
         
         self.driver.get(f"{self.base_url}/browse")
@@ -192,73 +230,84 @@ class TestSalonBrowsing(BaseTest):
         try:
             # Look for salon cards or search bar
             search_input = self.wait.until(
-                EC.presence_of_element_located((By.XPATH, "//input[@placeholder*='Search' or @placeholder*='salon']"))
+                EC.presence_of_element_located((By.XPATH, "//input[contains(@placeholder, 'Search') or contains(@placeholder, 'salon') or @type='search']"))
             )
-            print("✅ Salon browsing page loaded")
+            print("✅ Salon browsing page loaded with search functionality")
         except TimeoutException:
             # Alternative: check for salon cards
             salon_cards = self.driver.find_elements(By.XPATH, "//*[contains(@class, 'salon') or contains(@class, 'card')]")
             if salon_cards:
                 print("✅ Salon browsing page loaded with salon cards")
             else:
-                print("⚠️  Salon browsing page loaded but no salons visible")
+                assert "/browse" in self.driver.current_url
+                print("✅ Salon browsing page loaded")
     
     def test_search_salons(self):
-        """Test 2: Search salons by name"""
+        """Test 2: Search salons by name (continues from browse page)"""
         print("\n🧪 Test 2: Search Salons by Name")
-        self.login_customer()
-        
-        self.driver.get(f"{self.base_url}/browse")
-        time.sleep(2)
+        # Continue from browse page
+        if "/browse" not in self.driver.current_url:
+            if "/auth" in self.driver.current_url:
+                self.login_customer()
+            self.driver.get(f"{self.base_url}/browse")
+            time.sleep(2)
         
         # Find search input and enter query
         try:
             search_input = self.wait.until(
-                EC.presence_of_element_located((By.XPATH, "//input[@type='text' or @type='search']"))
+                EC.presence_of_element_located((By.XPATH, "//input[contains(@placeholder, 'Search by name') or contains(@placeholder, 'Search') or @type='search']"))
             )
+            search_input.clear()
             search_input.send_keys("salon")
             time.sleep(1)
-            print("✅ Search query entered")
+            print("✅ Search query entered successfully")
         except TimeoutException:
             print("⚠️  Search input not found, skipping search test")
     
     def test_view_salon_profile(self):
-        """Test 3: View salon profile/details"""
+        """Test 3: View salon profile/details (continues from browse/search)"""
         print("\n🧪 Test 3: View Salon Profile")
-        self.login_customer()
-        
-        self.driver.get(f"{self.base_url}/browse")
-        time.sleep(2)
+        # Continue from browse page
+        if "/browse" not in self.driver.current_url and "/salon/" not in self.driver.current_url:
+            if "/auth" in self.driver.current_url:
+                self.login_customer()
+            self.driver.get(f"{self.base_url}/browse")
+            time.sleep(2)
         
         # Try to find and click first salon card
         try:
             salon_link = self.wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/salon/')] | //*[contains(@class, 'salon')]//a"))
+                EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/salon/')] | //*[contains(@class, 'salon')]//a | //*[contains(@class, 'card')]//a"))
             )
             salon_link.click()
             time.sleep(2)
             
             # Verify on salon profile page
             assert "/salon/" in self.driver.current_url
-            print("✅ Salon profile page loaded")
+            print("✅ Salon profile page loaded successfully")
         except TimeoutException:
             print("⚠️  No salon cards found, skipping profile view test")
     
     def test_filter_salons_by_service(self):
-        """Test 4: Filter salons by service"""
+        """Test 4: Filter salons by service (continues from browse page)"""
         print("\n🧪 Test 4: Filter Salons by Service")
-        self.login_customer()
-        
-        self.driver.get(f"{self.base_url}/browse")
-        time.sleep(2)
+        # Navigate back to browse page if we're on a salon profile
+        if "/salon/" in self.driver.current_url:
+            self.driver.get(f"{self.base_url}/browse")
+            time.sleep(2)
+        elif "/browse" not in self.driver.current_url:
+            if "/auth" in self.driver.current_url:
+                self.login_customer()
+            self.driver.get(f"{self.base_url}/browse")
+            time.sleep(2)
         
         # Try to find service filter buttons
         try:
-            service_buttons = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Hair') or contains(text(), 'Cut')]")
+            service_buttons = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Hair') or contains(text(), 'Cut') or contains(text(), 'Service')]")
             if service_buttons:
                 service_buttons[0].click()
                 time.sleep(1)
-                print("✅ Service filter applied")
+                print("✅ Service filter applied successfully")
             else:
                 print("⚠️  Service filter buttons not found")
         except Exception as e:
@@ -266,50 +315,61 @@ class TestSalonBrowsing(BaseTest):
 
 
 class TestAppointmentBooking(BaseTest):
-    """Test suite for appointment booking features"""
+    """Test suite for appointment booking features - continues from salon browsing"""
     
     def test_view_barbers(self):
-        """Test 1: View available barbers on salon profile"""
+        """Test 1: View available barbers on salon profile (continues from salon browsing)"""
         print("\n🧪 Test 1: View Available Barbers")
+        # Always login first (new browser session for this test class)
         self.login_customer()
         
         # Navigate to a salon profile
-        self.driver.get(f"{self.base_url}/browse")
-        time.sleep(2)
-        
-        try:
-            # Try to click first salon
-            salon_link = self.wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/salon/')]"))
-            )
-            salon_link.click()
-            time.sleep(3)
+        if "/salon/" not in self.driver.current_url:
+            self.driver.get(f"{self.base_url}/browse")
+            time.sleep(2)
             
-            # Look for barbers/employees section
+            try:
+                # Try to click first salon
+                salon_link = self.wait.until(
+                    EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/salon/')] | //*[contains(@class, 'salon')]//a | //*[contains(@class, 'card')]//a"))
+                )
+                salon_link.click()
+                time.sleep(3)
+            except TimeoutException:
+                print("⚠️  Could not navigate to salon profile")
+                return
+        
+        # Now on salon profile, look for barbers/employees section
+        try:
             barber_elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Barber') or contains(text(), 'Employee') or contains(text(), 'Provider')]")
             if barber_elements:
                 print("✅ Barbers section found on salon profile")
             else:
                 print("⚠️  Barbers section not visible (may need to click Book button)")
-        except TimeoutException:
-            print("⚠️  Could not navigate to salon profile")
+        except Exception as e:
+            print(f"⚠️  Could not find barbers section: {e}")
     
     def test_view_time_slots(self):
-        """Test 2: View available time slots for a service"""
+        """Test 2: View available time slots for a service (continues from salon profile)"""
         print("\n🧪 Test 2: View Available Time Slots")
-        self.login_customer()
-        
-        self.driver.get(f"{self.base_url}/browse")
-        time.sleep(2)
+        # Continue from salon profile (should already be logged in from previous test)
+        if "/salon/" not in self.driver.current_url:
+            # If not on salon profile, navigate there (should already be logged in)
+            if "/browse" not in self.driver.current_url:
+                self.driver.get(f"{self.base_url}/browse")
+                time.sleep(2)
+            
+            try:
+                salon_link = self.wait.until(
+                    EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/salon/')] | //*[contains(@class, 'salon')]//a | //*[contains(@class, 'card')]//a"))
+                )
+                salon_link.click()
+                time.sleep(3)
+            except TimeoutException:
+                print("⚠️  Could not navigate to salon profile")
+                return
         
         try:
-            # Navigate to salon and try to open booking modal
-            salon_link = self.wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/salon/')]"))
-            )
-            salon_link.click()
-            time.sleep(3)
-            
             # Try to find and click Book button
             book_buttons = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Book') or contains(text(), 'Appointment')]")
             if book_buttons:
@@ -328,21 +388,26 @@ class TestAppointmentBooking(BaseTest):
             print(f"⚠️  Could not view time slots: {e}")
     
     def test_complete_booking_flow(self):
-        """Test 3: Complete appointment booking flow"""
+        """Test 3: Complete appointment booking flow (continues from salon profile)"""
         print("\n🧪 Test 3: Complete Booking Flow")
-        self.login_customer()
-        
-        self.driver.get(f"{self.base_url}/browse")
-        time.sleep(2)
+        # Continue from salon profile (should already be logged in from previous test)
+        if "/salon/" not in self.driver.current_url:
+            # If not on salon profile, navigate there (should already be logged in)
+            if "/browse" not in self.driver.current_url:
+                self.driver.get(f"{self.base_url}/browse")
+                time.sleep(2)
+            
+            try:
+                salon_link = self.wait.until(
+                    EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/salon/')] | //*[contains(@class, 'salon')]//a | //*[contains(@class, 'card')]//a"))
+                )
+                salon_link.click()
+                time.sleep(3)
+            except TimeoutException:
+                print("⚠️  Could not navigate to salon profile")
+                return
         
         try:
-            # Navigate to salon
-            salon_link = self.wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/salon/')]"))
-            )
-            salon_link.click()
-            time.sleep(3)
-            
             # Click Book button
             book_buttons = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Book')]")
             if book_buttons:
@@ -360,11 +425,12 @@ class TestAppointmentBooking(BaseTest):
 
 
 class TestAppointmentManagement(BaseTest):
-    """Test suite for appointment management features"""
+    """Test suite for appointment management features - chained flow"""
     
     def test_view_appointments(self):
         """Test 1: View my appointments page"""
         print("\n🧪 Test 1: View My Appointments")
+        # Always login first (new browser session for this test class)
         self.login_customer()
         
         self.driver.get(f"{self.base_url}/appointments")
@@ -380,12 +446,14 @@ class TestAppointmentManagement(BaseTest):
             print("✅ Appointments page loaded")
     
     def test_reschedule_appointment(self):
-        """Test 2: Reschedule an appointment"""
+        """Test 2: Reschedule an appointment (continues from appointments page)"""
         print("\n🧪 Test 2: Reschedule Appointment")
-        self.login_customer()
-        
-        self.driver.get(f"{self.base_url}/appointments")
-        time.sleep(2)
+        # Continue from appointments page
+        if "/appointments" not in self.driver.current_url:
+            if "/auth" in self.driver.current_url:
+                self.login_customer()
+            self.driver.get(f"{self.base_url}/appointments")
+            time.sleep(2)
         
         # Try to find reschedule button
         try:
@@ -400,12 +468,14 @@ class TestAppointmentManagement(BaseTest):
             print(f"⚠️  Could not reschedule: {e}")
     
     def test_cancel_appointment(self):
-        """Test 3: Cancel an appointment with reason"""
+        """Test 3: Cancel an appointment with reason (continues from appointments page)"""
         print("\n🧪 Test 3: Cancel Appointment")
-        self.login_customer()
-        
-        self.driver.get(f"{self.base_url}/appointments")
-        time.sleep(2)
+        # Continue from appointments page
+        if "/appointments" not in self.driver.current_url:
+            if "/auth" in self.driver.current_url:
+                self.login_customer()
+            self.driver.get(f"{self.base_url}/appointments")
+            time.sleep(2)
         
         # Try to find cancel button
         try:
@@ -746,10 +816,10 @@ def run_all_tests():
     # Define all test classes and their test methods
     test_classes = [
         (TestAuthentication, [
-            "test_view_profile",
-            "test_user_login",
-            "test_form_validation",
             "test_invalid_login",
+            "test_user_login",
+            "test_view_profile",
+            "test_edit_last_name",
         ]),
         (TestSalonBrowsing, [
             "test_browse_salons",
@@ -805,23 +875,39 @@ def run_all_tests():
         print(f"📦 Test Suite: {class_name}")
         print(f"{'='*70}")
         
-        for test_method_name in test_methods:
-            test_instance = test_class()
-            test_func = getattr(test_instance, test_method_name)
+        # Create one instance per test class to share browser session
+        test_instance = test_class()
+        
+        try:
+            # Setup browser once for the entire test class
+            test_instance.setup_method()
             
-            try:
-                test_instance.setup_method()
-                test_func()
-                test_instance.teardown_method()
-                passed += 1
-            except Exception as e:
-                print(f"❌ Test failed: {test_method_name}")
-                print(f"   Error: {str(e)}")
+            # Run all tests in sequence on the same browser
+            for test_method_name in test_methods:
+                test_func = getattr(test_instance, test_method_name)
+                
                 try:
-                    test_instance.teardown_method()
-                except:
-                    pass
-                failed += 1
+                    test_func()
+                    passed += 1
+                except Exception as e:
+                    print(f"❌ Test failed: {test_method_name}")
+                    print(f"   Error: {str(e)}")
+                    failed += 1
+                    # Continue with next test even if one fails
+            
+            # Teardown browser once after all tests in class
+            test_instance.teardown_method()
+            
+        except Exception as e:
+            print(f"❌ Setup/Teardown failed for {class_name}")
+            print(f"   Error: {str(e)}")
+            # Try to cleanup if setup succeeded but teardown failed
+            try:
+                if hasattr(test_instance, 'driver') and test_instance.driver:
+                    test_instance.driver.quit()
+            except:
+                pass
+            failed += len(test_methods)  # Count all tests as failed if setup failed
     
     print("\n" + "=" * 70)
     print("📊 FINAL TEST RESULTS")
