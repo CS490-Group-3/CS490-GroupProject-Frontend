@@ -17,6 +17,7 @@ import {
 export default function PaymentForm({ 
   appointmentId,  // For existing appointments
   appointmentData, // For new appointments (will be created with payment)
+  orderId,  // For orders
   amount, 
   salonId, 
   onSuccess, 
@@ -197,7 +198,7 @@ export default function PaymentForm({
     
     try {
       // If we have appointmentData, create appointment with payment atomically
-      // Otherwise, use existing appointmentId
+      // Otherwise, use existing appointmentId or orderId
       if (appointmentData) {
         const paymentData = {
           redeem_loyalty_points: redeemLoyaltyPoints
@@ -242,8 +243,33 @@ export default function PaymentForm({
         const result = await createPayment(paymentData);
         
         onSuccess(result);
+      } else if (orderId) {
+        // Order payment - only send order_id, NOT appointment_id
+        // Products can be purchased independently of appointments
+        const paymentData = {
+          order_id: orderId,
+          redeem_loyalty_points: redeemLoyaltyPoints
+          // Explicitly NOT including appointment_id for order payments
+        };
+        
+        if (useNewCard) {
+          paymentData.card_number = cardNumber.replace(/\s/g, "");
+          paymentData.exp_month = parseInt(expMonth);
+          paymentData.exp_year = parseInt(expYear);
+          paymentData.cvv = cvv;
+          paymentData.cardholder_name = cardholderName;
+          paymentData.billing_address = billingAddress;
+          paymentData.save_payment_method = savePaymentMethod;
+        } else {
+          paymentData.payment_method_id = selectedMethod.id;
+        }
+        
+        const { createPayment } = await import("../api.js");
+        const result = await createPayment(paymentData);
+        
+        onSuccess(result);
       } else {
-        throw new Error("Either appointmentId or appointmentData must be provided");
+        throw new Error("Either appointmentId, appointmentData, or orderId must be provided");
       }
     } catch (err) {
       setError(err.message || "Payment failed. Please try again.");
