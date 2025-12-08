@@ -1,0 +1,3 @@
+TEST BUSINESS LICENSE
+License Number: TEST-12345
+Valid for automated testing purposes only.
