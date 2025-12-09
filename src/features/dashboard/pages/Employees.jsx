@@ -250,29 +250,28 @@ export default function Employees() {
     setSavingServices(true);
     try {
       const currentServiceIds = (barberServices[barberId] || []).map(s => s.id);
-      const selectedServiceIds = pendingServiceSelections[barberId] || [];
+      let selectedServiceIds = pendingServiceSelections[barberId] || [];
       
-      // Add new services
+      // Deduplicate selectedServiceIds - remove any duplicate service IDs
+      selectedServiceIds = [...new Set(selectedServiceIds)];
+      
+      // Add new services sequentially
       const toAdd = selectedServiceIds.filter(id => !currentServiceIds.includes(id));
-      await Promise.all(
-        toAdd.map(serviceId => 
-          addServiceToBarber(salonId, barberId, serviceId).catch(err => 
-            console.error(`Failed to add service ${serviceId}:`, err)
-          )
-        )
-      );
+      for (let i = 0; i < toAdd.length; i++) {
+        const serviceId = toAdd[i];
+        await addServiceToBarber(salonId, barberId, serviceId);
+      }
       
-      // Remove services
+      // Remove services sequentially
       const toRemove = currentServiceIds.filter(id => !selectedServiceIds.includes(id));
-      await Promise.all(
-        toRemove.map(serviceId => 
-          api(`/salons/${salonId}/barbers/${barberId}/services/${serviceId}`, {
-            method: "DELETE"
-          }).catch(err => console.error(`Failed to remove service ${serviceId}:`, err))
-        )
-      );
+      for (let i = 0; i < toRemove.length; i++) {
+        const serviceId = toRemove[i];
+        await api(`/salons/${salonId}/barbers/${barberId}/services/${serviceId}`, {
+          method: "DELETE"
+        });
+      }
       
-      // Reload barber services
+      // Reload barber services to verify assignments (regardless of response codes)
       await handleLoadBarberServices(barberId);
       setSelectedBarberForService(null);
       alert("Services updated successfully!");
@@ -530,8 +529,13 @@ export default function Employees() {
         {employees.length === 0 ? (
           <p className="text-gray-600">No employees yet. Add your first employee above.</p>
         ) : (
-          <div className="space-y-4">
-            {employees.map((emp) => (
+          <div className="space-y-6">
+            {/* Active Employees */}
+            {employees.filter(emp => emp.is_active !== false).length > 0 && (
+              <div>
+                <h3 className="text-md font-semibold mb-3 text-gray-800">Active Employees</h3>
+                <div className="space-y-4">
+                  {employees.filter(emp => emp.is_active !== false).map((emp) => (
               <div key={emp.id} className="border rounded-lg p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -659,8 +663,9 @@ export default function Employees() {
                         <div className="space-y-2 max-h-48 overflow-y-auto">
                           {services.map((service) => {
                             const currentServiceIds = barberServices[emp.id]?.map(s => s.id) || [];
-                            const pendingIds = pendingServiceSelections[emp.id] || [];
-                            const isChecked = pendingIds.length > 0 
+                            const pendingIds = pendingServiceSelections[emp.id];
+                            // If pendingIds exists (even if empty array), use it. Otherwise fall back to current services.
+                            const isChecked = pendingIds !== undefined
                               ? pendingIds.includes(service.id)
                               : currentServiceIds.includes(service.id);
                             
@@ -827,7 +832,38 @@ export default function Employees() {
                   </div>
                 )}
               </div>
-            ))}
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Inactive Employees (Past Employees) */}
+            {employees.filter(emp => emp.is_active === false).length > 0 && (
+              <div>
+                <h3 className="text-md font-semibold mb-3 text-gray-600">Past Employees</h3>
+                <div className="space-y-4">
+                  {employees.filter(emp => emp.is_active === false).map((emp) => (
+                    <div key={emp.id} className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-lg font-semibold text-gray-700">{emp.name}</h3>
+                            <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">Inactive</span>
+                          </div>
+                          
+                          <>
+                            {emp.bio && <p className="text-gray-600 text-sm mb-1">{emp.bio}</p>}
+                            {emp.years_experience !== null && emp.years_experience !== undefined && (
+                              <p className="text-sm text-gray-500">Years of Experience: {emp.years_experience}</p>
+                            )}
+                          </>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

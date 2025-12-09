@@ -180,6 +180,8 @@ export default function SalonRegister() {
   const [logoFile, setLogoFile] = useState(null);
   const [licenseFile, setLicenseFile] = useState(null);
   const [formError, setFormError] = useState("");
+  
+  const DESCRIPTION_MAX_LENGTH = 255;
 
   const parseError = (err) => {
     const fallback = "Application failed. Try again later.";
@@ -230,6 +232,10 @@ export default function SalonRegister() {
     }
     if (status === "not_submitted" && !licenseFile) {
       setFormError("Business license is required.");
+      return false;
+    }
+    if (description && description.length > DESCRIPTION_MAX_LENGTH) {
+      setFormError(`Description must be ${DESCRIPTION_MAX_LENGTH} characters or less.`);
       return false;
     }
     setFormError("");
@@ -713,7 +719,12 @@ export default function SalonRegister() {
             </div>
 
             <div>
-              <Label htmlFor="description">Description *</Label>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="description">Description *</Label>
+                <span className={`text-sm ${description.length > DESCRIPTION_MAX_LENGTH ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                  {description.length} / {DESCRIPTION_MAX_LENGTH}
+                </span>
+              </div>
               <Textarea
                 id="description"
                 value={description}
@@ -722,7 +733,13 @@ export default function SalonRegister() {
                 rows={4}
                 required
                 disabled={!isEditing}
+                className={description.length > DESCRIPTION_MAX_LENGTH ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
               />
+              {description.length > DESCRIPTION_MAX_LENGTH && (
+                <p className="text-sm text-red-600 mt-1 font-medium">
+                  Description exceeds the {DESCRIPTION_MAX_LENGTH} character limit by {description.length - DESCRIPTION_MAX_LENGTH} characters. Please shorten it to submit.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

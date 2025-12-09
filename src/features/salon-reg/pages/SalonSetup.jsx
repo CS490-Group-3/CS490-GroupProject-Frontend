@@ -262,7 +262,7 @@ export default function SalonSetup() {
     setSearching(true);
     try {
       const res = await searchBarbers(searchTerm);
-      setSearchResults(res.providers || []);
+      setSearchResults(res.barbers || []);
     } catch (error) {
       console.error("Search error:", error);
       setSearchResults([]);
@@ -329,9 +329,12 @@ export default function SalonSetup() {
 
   const handleSaveBarberServices = async (barberId) => {
     if (!salonId) return;
-    const selectedServices = pendingServiceSelections[barberId] || [];
+    let selectedServices = pendingServiceSelections[barberId] || [];
     const currentServices = barberServices[barberId] || [];
     const currentServiceIds = currentServices.map(s => s.id);
+    
+    // Deduplicate selectedServices - remove any duplicate service IDs
+    selectedServices = [...new Set(selectedServices)];
     
     // Find services to add (in selection but not in current)
     const toAdd = selectedServices.filter(id => !currentServiceIds.includes(id));
@@ -340,23 +343,22 @@ export default function SalonSetup() {
     
     setSavingServices(true);
     try {
-      // Add new services
-      await Promise.all(
-        toAdd.map(serviceId => addServiceToBarber(salonId, barberId, serviceId))
-      );
+      // Add new services sequentially
+      if (toAdd.length > 0) {
+        for (let i = 0; i < toAdd.length; i++) {
+          const serviceId = toAdd[i];
+          await addServiceToBarber(salonId, barberId, serviceId);
+        }
+      }
       
-      // Remove unselected services
+      // Remove unselected services sequentially
       if (toRemove.length > 0) {
-        await Promise.all(
-          toRemove.map(serviceId => 
-            api(`/salons/${salonId}/barbers/${barberId}/services/${serviceId}`, {
-              method: "DELETE"
-            }).catch(err => {
-              console.error(`Failed to remove service ${serviceId}:`, err);
-              // Continue with other removals even if one fails
-            })
-          )
-        );
+        for (let i = 0; i < toRemove.length; i++) {
+          const serviceId = toRemove[i];
+          await api(`/salons/${salonId}/barbers/${barberId}/services/${serviceId}`, {
+            method: "DELETE"
+          });
+        }
       }
       
       // Reload barber services to ensure state is up-to-date
@@ -738,10 +740,9 @@ export default function SalonSetup() {
                       {services.filter(service => service && service.id).map((service) => {
                         const currentServices = barberServices[emp.id] || [];
                         const currentServiceIds = currentServices.map(s => s.id);
-                        const pendingSelections = pendingServiceSelections[emp.id] || [];
-                        // Show checked if in pending selections, OR if already assigned (when pendingSelections is empty or doesn't override)
-                        // If pendingSelections exists, use it. Otherwise, use currentServiceIds
-                        const isChecked = pendingSelections.length > 0 
+                        const pendingSelections = pendingServiceSelections[emp.id];
+                        // If pendingSelections exists (even if empty array), use it. Otherwise fall back to current services.
+                        const isChecked = pendingSelections !== undefined
                           ? pendingSelections.includes(service.id)
                           : currentServiceIds.includes(service.id);
                         return (

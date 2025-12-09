@@ -11,6 +11,7 @@ import scheduleRoutes from "../features/schedule/routes.jsx";
 import adminRoutes from "../features/admin/routes.jsx";
 import homeRoutes from "../features/home/routes.jsx";
 import notificationsRoutes from "../features/notifications/routes.jsx";
+import ordersRoutes from "../features/orders/routes.jsx";
 import NotFound from "./NotFound.jsx";
 
 export default [
@@ -19,6 +20,7 @@ export default [
     ...bookingRoutes,
     ...loyaltyRoutes,
     ...profileRoutes,
+    ...ordersRoutes,
     ...dashboardRoutes,
     ...customerManagementRoutes,
     ...shopRoutes,

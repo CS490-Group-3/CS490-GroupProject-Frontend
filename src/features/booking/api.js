@@ -13,7 +13,8 @@ function buildSearch(params = {}) {
 
 async function fetchAppointments(params = {}) {
   const res = await api(`/appointments${buildSearch(params)}`);
-  return res.appointments ?? [];
+  // Return the full response object for pagination info
+  return res;
 }
 
 export async function listServices() {
@@ -57,10 +58,31 @@ export async function listAvailability({ salonId, employeeId, serviceId, dateISO
   return res.slots ?? [];
 }
 
-export async function listUserAppointments() {
-  const upcoming = await fetchAppointments({ when: "upcoming" });
-  const past = await fetchAppointments({ when: "past" });
-  return { upcoming, past };
+export async function listUserAppointments(params = {}) {
+  const { 
+    when, 
+    page = 1, 
+    limit = 100, 
+    sort = "asc",
+    status
+  } = params;
+  
+  const searchParams = {
+    page,
+    limit,
+    sort
+  };
+  
+  if (when) {
+    searchParams.when = when;
+  }
+  
+  if (status) {
+    searchParams.status = status;
+  }
+  
+  const res = await fetchAppointments(searchParams);
+  return res;
 }
 
 export async function createAppointment(payload) {

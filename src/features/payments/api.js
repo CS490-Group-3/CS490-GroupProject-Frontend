@@ -8,7 +8,10 @@ import { api } from "../../shared/api/client.js";
 export async function getSavedPaymentMethods() {
   try {
     const response = await api("/payment-methods");
-    return response.payment_methods || [];
+    console.log("Payment methods API response:", response);
+    const methods = response.payment_methods || response || [];
+    console.log("Returning payment methods:", methods);
+    return methods;
   } catch (error) {
     console.error("Failed to fetch saved payment methods:", error);
     return [];

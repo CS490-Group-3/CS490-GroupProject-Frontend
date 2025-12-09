@@ -250,16 +250,16 @@ export async function respondToReview(reviewId, message) {
 }
 
 // Get customer appointments (for salon owner)
-export async function getCustomerAppointments(salonId, customerId, page = 1, limit = 20, when = "all", status = null) {
+export async function getCustomerAppointments(salonId, customerId, page = 1, limit = 100, when = "all", status = null, sort = "asc") {
   // Salon owners can filter by customer_id, the endpoint will return all salon appointments filtered by customer
-  let url = `/appointments?customer_id=${customerId}&salon_id=${salonId}&when=${when}&page=${page}&limit=${limit}`;
+  let url = `/appointments?customer_id=${customerId}&salon_id=${salonId}&when=${when}&page=${page}&limit=${limit}&sort=${sort}`;
   if (status) {
     url += `&status=${status}`;
   }
   const res = await api(url);
   // Handle both array and object response formats
   if (Array.isArray(res)) {
-    return { appointments: res, count: res.length, page: 1, limit: res.length };
+    return { appointments: res, total_count: res.length, count: res.length, page: 1, limit: res.length };
   }
   return res;
 }

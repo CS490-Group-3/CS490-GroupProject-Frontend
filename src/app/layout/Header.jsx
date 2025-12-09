@@ -95,6 +95,7 @@ export default function Header() {
           <>
             <NavLink to="/browse" className={linkClass}>Browse Salons</NavLink>
             <NavLink to="/appointments" className={linkClass}>My Appointments</NavLink>
+            <NavLink to="/orders" className={linkClass}>Orders</NavLink>
             <NavLink to="/rewards" className={linkClass}>Loyalty</NavLink>
             <NavLink to="/profile" className={linkClass}>Profile</NavLink>
           </>
@@ -109,9 +110,11 @@ export default function Header() {
               <NavLink to="/salon-settings" className={linkClass}>Settings</NavLink>
               <NavLink to="/employees" className={linkClass}>Employees</NavLink>
               <NavLink to="/clients" className={linkClass}>Customers</NavLink>
+              <NavLink to="/salon-orders" className={linkClass}>Orders</NavLink>
+              <NavLink to="/revenue" className={linkClass}>Revenue</NavLink>
+              <NavLink to="/promotions" className={linkClass}>Promotions</NavLink>
               <NavLink to="/loyalty-program" className={linkClass}>Loyalty Program</NavLink>
               <NavLink to="/retail" className={linkClass}>My Shop</NavLink>
-              <NavLink to="/payments" className={linkClass}>Payments</NavLink>
               <NavLink to="/profile" className={linkClass}>Profile</NavLink>
             </>
           );
@@ -136,6 +139,7 @@ export default function Header() {
         return (
           <>
             <NavLink to="/schedule" className={linkClass}>My Schedule</NavLink>
+            <NavLink to="/my-salon" className={linkClass}>My Salon</NavLink>
             <NavLink to="/profile" className={linkClass}>Profile</NavLink>
           </>
         );
@@ -145,6 +149,7 @@ export default function Header() {
             <NavLink to="/admin/dashboard" className={linkClass}>Dashboard</NavLink>
             <NavLink to="/admin/verify" className={linkClass}>Salon Verification</NavLink>
             <NavLink to="/admin/analytics" className={linkClass}>Analytics</NavLink>
+            <NavLink to="/admin/revenue" className={linkClass}>Revenue</NavLink>
             <NavLink to="/admin/audit-logs" className={linkClass}>Audit</NavLink>
             <NavLink to="/admin/health" className={linkClass}>Monitor</NavLink>
             <NavLink to="/profile" className={linkClass}>Profile</NavLink>
@@ -157,41 +162,43 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-10 bg-white border-b border-gray-200">
-      <div className="max-w-6xl mx-auto flex items-center justify-between gap-4 p-4">
-        <div className="flex items-center gap-4 flex-shrink-0">
-          <NavLink to="/" className="flex items-center text-lg font-extrabold text-indigo-600 hover:text-indigo-700 flex-shrink-0">
-            <img src={salonicaLogo} alt="Salonica" className="h-10 w-auto object-contain max-w-[120px]" />
-          </NavLink>
-          <nav className="flex gap-3">
-            {getNavLinks()}
-          </nav>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          {user ? (
-            <>
-              <NotificationDrawer />
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">
-                  Welcome, {displayName}
-                </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                  {user.role}
-                </span>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="px-3 py-2 rounded-md font-semibold text-gray-700 hover:bg-gray-100 transition-colors duration-150"
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <nav className="flex gap-2">
-              <NavLink to="/auth/sign-in" className={linkClass}>Sign In</NavLink>
-              <NavLink to="/auth/sign-up" className={linkClass}>Sign Up</NavLink>
+      <div className="w-full px-4">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 py-3">
+          <div className="flex items-center gap-3 flex-shrink-0 w-full md:w-auto justify-center md:justify-start">
+            <NavLink to="/" className="flex items-center text-lg font-extrabold text-indigo-600 hover:text-indigo-700 flex-shrink-0">
+              <img src={salonicaLogo} alt="Salonica" className="h-8 md:h-10 w-auto object-contain max-w-[100px] md:max-w-[120px]" />
+            </NavLink>
+            <nav className="flex flex-wrap gap-2 justify-center md:justify-start">
+              {getNavLinks()}
             </nav>
-          )}
+          </div>
+          
+          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
+            {user ? (
+              <>
+                <NotificationDrawer />
+                <div className="flex items-center gap-2">
+                  <span className="text-xs md:text-sm text-gray-600 whitespace-nowrap">
+                    Welcome, {displayName}
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 whitespace-nowrap">
+                    {user.role}
+                  </span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-2 md:px-3 py-1.5 md:py-2 rounded-md font-semibold text-xs md:text-base text-gray-700 hover:bg-gray-100 transition-colors duration-150 whitespace-nowrap"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <nav className="flex gap-2">
+                <NavLink to="/auth/sign-in" className={linkClass}>Sign In</NavLink>
+                <NavLink to="/auth/sign-up" className={linkClass}>Sign Up</NavLink>
+              </nav>
+            )}
+          </div>
         </div>
       </div>
     </header>

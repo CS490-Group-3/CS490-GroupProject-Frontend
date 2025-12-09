@@ -14,8 +14,12 @@ import {
   deleteUnavailability,
   fetchAvailability,
   notifyRunningLate,
+  getMyBarberSalon,
 } from "../api.js";
+import { useAuth } from "../../auth/auth-provider.jsx";
 import NotificationsPage from "../../notifications/pages/NotificationsPage.jsx";
+import { Card } from "../../../shared/ui/card.jsx";
+import { Building2 } from "lucide-react";
 
 const SLOT_DURATION_MINUTES = 60;
 const DISPLAY_SLOT_MINUTES = 15;
@@ -164,6 +168,9 @@ const slotToRange = (dateObj, slotLabel, durationMinutes = SLOT_DURATION_MINUTES
 };
 
 export default function ProviderDashboard() {
+  const { user } = useAuth();
+  const [isInSalon, setIsInSalon] = useState(null);
+  const [checkingSalon, setCheckingSalon] = useState(true);
   const [activeTab, setActiveTab] = useState("schedule");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -187,40 +194,44 @@ export default function ProviderDashboard() {
   const [loadingBlocks, setLoadingBlocks] = useState(false);
   const [weeklyAvailability, setWeeklyAvailability] = useState([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
-  const [notifyingLate, setNotifyingLate] = useState(null); // appointment ID being notified
+  const [notifyingLate, setNotifyingLate] = useState(null);
 
-  const handleDateClick = (dateNumber) => {
-    if (dateNumber >= 1 && dateNumber <= 31 && !Number.isNaN(dateNumber)) {
-      const newDate = new Date(
-        currentMonth.getFullYear(),
-        currentMonth.getMonth(),
-        dateNumber
-      );
-      setSelectedDate(newDate);
+  // Check if barber is in a salon before loading any data
+  useEffect(() => {
+    if (user?.role !== "barber") {
+      setIsInSalon(true);
+      setCheckingSalon(false);
+      return;
     }
-  };
 
-  const handlePrevMonth = () => {
-    setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
-    );
-  };
-
-  const handleNextMonth = () => {
-    setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
-    );
-  };
+    let alive = true;
+    (async () => {
+      try {
+        await getMyBarberSalon();
+        if (!alive) return;
+        setIsInSalon(true);
+      } catch (err) {
+        if (!alive) return;
+        if (err.response?.status === 404 || err.message?.includes("not associated") || err.message?.includes("404")) {
+          setIsInSalon(false);
+        } else {
+          setIsInSalon(true);
+        }
+      } finally {
+        if (alive) setCheckingSalon(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [user?.role]);
 
   const loadAppointments = useCallback(async () => {
+    if (user?.role === "barber" && !isInSalon) return;
+    
     setLoadingAppointments(true);
     try {
-      // For provider schedule we want full history (past + upcoming) for this barber.
-      // Paginate through /appointments until we exhaust all pages.
       const all = [];
       const pageSize = 100;
       let page = 1;
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const response = await fetchAppointments({
           when: "all",
@@ -247,11 +258,223 @@ export default function ProviderDashboard() {
     } finally {
       setLoadingAppointments(false);
     }
-  }, []);
+  }, [user?.role, isInSalon]);
 
   useEffect(() => {
-    loadAppointments();
-  }, [loadAppointments]);
+    if (!checkingSalon && (user?.role !== "barber" || isInSalon)) {
+      loadAppointments();
+    }
+  }, [loadAppointments, checkingSalon, user?.role, isInSalon]);
+
+  const loadBlocks = useCallback(async () => {
+    if (user?.role === "barber" && !isInSalon) return;
+    
+    setLoadingBlocks(true);
+    try {
+      const dayStart = new Date(selectedDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      const res = await fetchUnavailability({
+        start_from: dayStart.toISOString(),
+        end_before: dayEnd.toISOString(),
+      });
+      const list = Array.isArray(res?.blocks) ? res.blocks : [];
+      setBlockedWindows(list);
+    } catch (err) {
+      setBlockedWindows([]);
+    } finally {
+      setLoadingBlocks(false);
+    }
+  }, [selectedDate, user?.role, isInSalon]);
+
+  useEffect(() => {
+    if (!checkingSalon && (user?.role !== "barber" || isInSalon)) {
+      loadBlocks();
+    }
+  }, [loadBlocks, checkingSalon, user?.role, isInSalon]);
+
+  useEffect(() => {
+    if (user?.role === "barber" && !isInSalon) return;
+    
+    setLoadingAvailability(true);
+    fetchAvailability()
+      .then((res) => {
+        const fetched = Array.isArray(res?.availability) ? res.availability : [];
+        setWeeklyAvailability(fetched);
+      })
+      .catch(() => setWeeklyAvailability([]))
+      .finally(() => setLoadingAvailability(false));
+  }, [user?.role, isInSalon]);
+
+  const scheduleTz = useMemo(
+    () =>
+      appointments.find((a) => a.timezone)?.timezone ||
+      appointments[0]?.timezone ||
+      "America/New_York",
+    [appointments]
+  );
+
+  const selectedDateISO = useMemo(
+    () => formatDateInTz(selectedDate, scheduleTz),
+    [selectedDate, scheduleTz]
+  );
+
+  const todayAppointments = appointments.filter(
+    (a) => a.appointment_date === selectedDateISO
+  );
+
+  const selectedAppointments = todayAppointments.slice();
+  const inProgressAppointments = selectedAppointments.filter(isInProgressAppointment);
+  const upcomingAppointments = selectedAppointments.filter(
+    (apt) => !isCanceled(apt) && !isPastAppointment(apt) && !isInProgressAppointment(apt)
+  );
+  const pastAppointments = selectedAppointments.filter(
+    (apt) => !isCanceled(apt) && isPastAppointment(apt) && !isInProgressAppointment(apt)
+  );
+  const cancelledAppointments = selectedAppointments.filter((apt) => isCanceled(apt));
+
+  const sortByStart = (list) =>
+    list.slice().sort((a, b) => {
+      const aStart = a.start_at ? new Date(a.start_at).getTime() : 0;
+      const bStart = b.start_at ? new Date(b.start_at).getTime() : 0;
+      return aStart - bStart;
+    });
+
+  const availabilityByDow = useMemo(() => {
+    const map = {};
+    weeklyAvailability.forEach((entry) => {
+      if (!entry) return;
+      if (!entry.is_active) return;
+      if (!entry.start_time || !entry.end_time) return;
+      map[entry.day_of_week] = map[entry.day_of_week] || [];
+      map[entry.day_of_week].push(entry);
+    });
+    return map;
+  }, [weeklyAvailability]);
+
+  const daySlots = useMemo(() => {
+    const dow = selectedDate.getDay();
+    const windows = availabilityByDow[dow] || [];
+    const slots = [];
+    windows.forEach((win) => {
+      const [sh, sm = "0"] = String(win.start_time || "").split(":");
+      const [eh, em = "0"] = String(win.end_time || "").split(":");
+      const startWindow = new Date(selectedDate);
+      startWindow.setHours(Number(sh) || 0, Number(sm) || 0, 0, 0);
+      const endWindow = new Date(selectedDate);
+      endWindow.setHours(Number(eh) || 0, Number(em) || 0, 0, 0);
+      let cursor = new Date(startWindow);
+      while (cursor < endWindow) {
+        const slotEnd = new Date(cursor.getTime() + DISPLAY_SLOT_MINUTES * 60 * 1000);
+        if (slotEnd > endWindow) break;
+        const hh = cursor.getHours().toString().padStart(2, "0");
+        const mm = cursor.getMinutes().toString().padStart(2, "0");
+        slots.push({
+          label: toDisplayTime(`${hh}:${mm}:00`),
+          start: new Date(cursor),
+          end: slotEnd,
+          duration: DISPLAY_SLOT_MINUTES,
+        });
+        cursor = slotEnd;
+      }
+    });
+    return slots;
+  }, [availabilityByDow, selectedDate]);
+
+  const blockSlots = useMemo(() => {
+    const dow = selectedDate.getDay();
+    const windows = availabilityByDow[dow] || [];
+    const slots = [];
+    windows.forEach((win) => {
+      const [sh, sm = "0"] = String(win.start_time || "").split(":");
+      const [eh, em = "0"] = String(win.end_time || "").split(":");
+      const startWindow = new Date(selectedDate);
+      startWindow.setHours(Number(sh) || 0, Number(sm) || 0, 0, 0);
+      const endWindow = new Date(selectedDate);
+      endWindow.setHours(Number(eh) || 0, Number(em) || 0, 0, 0);
+      let cursor = new Date(startWindow);
+      while (cursor < endWindow) {
+        const slotEnd = new Date(cursor.getTime() + BLOCK_INTERVAL_MINUTES * 60 * 1000);
+        if (slotEnd > endWindow) break;
+        const hh = cursor.getHours().toString().padStart(2, "0");
+        const mm = cursor.getMinutes().toString().padStart(2, "0");
+        slots.push({
+          label: toDisplayTime(`${hh}:${mm}:00`),
+          start: new Date(cursor),
+          end: slotEnd,
+          windowStart: startWindow,
+          windowEnd: endWindow,
+        });
+        cursor = slotEnd;
+      }
+    });
+    return slots;
+  }, [availabilityByDow, selectedDate]);
+
+  // Show placeholder if barber not in salon
+  if (checkingSalon) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (user?.role === "barber" && !isInSalon) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <Card className="p-8 border-2 border-dashed border-gray-300">
+          <div className="text-center space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+              <Building2 className="h-8 w-8 text-gray-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                Not Yet Added to a Salon
+              </h2>
+              <p className="text-gray-600 max-w-md mx-auto">
+                You haven't been added to a salon yet. Please contact the salon owner to add you to their salon.
+                Once you're added, you'll be able to view your schedule, manage appointments, and set your availability here.
+              </p>
+            </div>
+            <div className="pt-4">
+              <p className="text-sm text-gray-500">
+                If you believe this is an error, please reach out to your salon owner or administrator.
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const handleDateClick = (dateNumber) => {
+    if (dateNumber >= 1 && dateNumber <= 31 && !Number.isNaN(dateNumber)) {
+      const newDate = new Date(
+        currentMonth.getFullYear(),
+        currentMonth.getMonth(),
+        dateNumber
+      );
+      setSelectedDate(newDate);
+    }
+  };
+
+  const handlePrevMonth = () => {
+    setCurrentMonth(
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
+    );
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonth(
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
+    );
+  };
 
   const getCalendarDates = () => {
     const year = currentMonth.getFullYear();
@@ -293,145 +516,6 @@ export default function ProviderDashboard() {
     return days;
   };
 
-  const scheduleTz = useMemo(
-    () =>
-      appointments.find((a) => a.timezone)?.timezone ||
-      appointments[0]?.timezone ||
-      "America/New_York",
-    [appointments]
-  );
-
-  const selectedDateISO = useMemo(
-    () => formatDateInTz(selectedDate, scheduleTz),
-    [selectedDate, scheduleTz]
-  );
-
-  const todayAppointments = appointments.filter(
-    (a) => a.appointment_date === selectedDateISO
-  );
-
-  // split selected-date appts into buckets
-  const selectedAppointments = todayAppointments.slice();
-  const inProgressAppointments = selectedAppointments.filter(isInProgressAppointment);
-  const upcomingAppointments = selectedAppointments.filter(
-    (apt) => !isCanceled(apt) && !isPastAppointment(apt) && !isInProgressAppointment(apt)
-  );
-  const pastAppointments = selectedAppointments.filter(
-    (apt) => !isCanceled(apt) && isPastAppointment(apt) && !isInProgressAppointment(apt)
-  );
-  const cancelledAppointments = selectedAppointments.filter((apt) => isCanceled(apt));
-
-  const sortByStart = (list) =>
-    list.slice().sort((a, b) => {
-      const aStart = a.start_at ? new Date(a.start_at).getTime() : 0;
-      const bStart = b.start_at ? new Date(b.start_at).getTime() : 0;
-      return aStart - bStart;
-    });
-
-  const loadBlocks = useCallback(async () => {
-    setLoadingBlocks(true);
-    try {
-      const dayStart = new Date(selectedDate);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-      const res = await fetchUnavailability({
-        start_from: dayStart.toISOString(),
-        end_before: dayEnd.toISOString(),
-      });
-      const list = Array.isArray(res?.blocks) ? res.blocks : [];
-      setBlockedWindows(list);
-    } catch (err) {
-      setBlockedWindows([]);
-    } finally {
-      setLoadingBlocks(false);
-    }
-  }, [selectedDate]);
-
-  useEffect(() => {
-    loadBlocks();
-  }, [loadBlocks]);
-
-  useEffect(() => {
-    setLoadingAvailability(true);
-    fetchAvailability()
-      .then((res) => {
-        const fetched = Array.isArray(res?.availability) ? res.availability : [];
-        setWeeklyAvailability(fetched);
-      })
-      .catch(() => setWeeklyAvailability([]))
-      .finally(() => setLoadingAvailability(false));
-  }, []);
-
-  const availabilityByDow = useMemo(() => {
-    const map = {};
-    weeklyAvailability.forEach((entry) => {
-      if (!entry) return;
-      if (!entry.is_active) return;
-      if (!entry.start_time || !entry.end_time) return;
-      map[entry.day_of_week] = map[entry.day_of_week] || [];
-      map[entry.day_of_week].push(entry);
-    });
-    return map;
-  }, [weeklyAvailability]);
-
-  const daySlots = useMemo(() => {
-    const dow = selectedDate.getDay(); // Sunday=0
-    const windows = availabilityByDow[dow] || [];
-    const slots = [];
-    windows.forEach((win) => {
-      const [sh, sm = "0"] = String(win.start_time || "").split(":");
-      const [eh, em = "0"] = String(win.end_time || "").split(":");
-      const startWindow = new Date(selectedDate);
-      startWindow.setHours(Number(sh) || 0, Number(sm) || 0, 0, 0);
-      const endWindow = new Date(selectedDate);
-      endWindow.setHours(Number(eh) || 0, Number(em) || 0, 0, 0);
-      let cursor = new Date(startWindow);
-      while (cursor < endWindow) {
-        const slotEnd = new Date(cursor.getTime() + DISPLAY_SLOT_MINUTES * 60 * 1000);
-        if (slotEnd > endWindow) break;
-        const hh = cursor.getHours().toString().padStart(2, "0");
-        const mm = cursor.getMinutes().toString().padStart(2, "0");
-        slots.push({
-          label: toDisplayTime(`${hh}:${mm}:00`),
-          start: new Date(cursor),
-          end: slotEnd,
-          duration: DISPLAY_SLOT_MINUTES,
-        });
-        cursor = slotEnd;
-      }
-    });
-    return slots;
-  }, [availabilityByDow, selectedDate]);
-
-  const blockSlots = useMemo(() => {
-    const dow = selectedDate.getDay(); // Sunday=0
-    const windows = availabilityByDow[dow] || [];
-    const slots = [];
-    windows.forEach((win) => {
-      const [sh, sm = "0"] = String(win.start_time || "").split(":");
-      const [eh, em = "0"] = String(win.end_time || "").split(":");
-      const startWindow = new Date(selectedDate);
-      startWindow.setHours(Number(sh) || 0, Number(sm) || 0, 0, 0);
-      const endWindow = new Date(selectedDate);
-      endWindow.setHours(Number(eh) || 0, Number(em) || 0, 0, 0);
-      let cursor = new Date(startWindow);
-      while (cursor < endWindow) {
-        const slotEnd = new Date(cursor.getTime() + BLOCK_INTERVAL_MINUTES * 60 * 1000);
-        if (slotEnd > endWindow) break;
-        const hh = cursor.getHours().toString().padStart(2, "0");
-        const mm = cursor.getMinutes().toString().padStart(2, "0");
-        slots.push({
-          label: toDisplayTime(`${hh}:${mm}:00`),
-          start: new Date(cursor),
-          end: slotEnd, // default 15-min end; will be replaced by selected duration at block time
-          windowStart: startWindow,
-          windowEnd: endWindow,
-        });
-        cursor = slotEnd;
-      }
-    });
-    return slots;
-  }, [availabilityByDow, selectedDate]);
 
   const renderSection = (title, items, statusOverride) => {
     if (!items.length) return null;

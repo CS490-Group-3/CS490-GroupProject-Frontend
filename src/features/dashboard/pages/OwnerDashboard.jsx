@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../shared/api/client.js";
 import { checkSetupStatus, getSalonServices, getSalonEmployees, updateSalon, createService, updateService, deleteService, addBarberToSalon, removeEmployee, searchBarbers, addServiceToBarber, getBarberServices, respondToReview } from "../../salon-reg/api.js";
@@ -16,6 +16,8 @@ export default function OwnerDashboard() {
   const [loading, setLoading] = useState(true);
   const [setupComplete, setSetupComplete] = useState(null);
   const [checkingSetup, setCheckingSetup] = useState(false);
+  
+  const DESCRIPTION_MAX_LENGTH = 255;
   
   // Editable state
   const [editingSalon, setEditingSalon] = useState(false);
@@ -55,6 +57,7 @@ export default function OwnerDashboard() {
   
   // Reviews state
   const [reviews, setReviews] = useState([]);
+  const [reviewFilter, setReviewFilter] = useState("all");
   const [respondingToReview, setRespondingToReview] = useState(null);
   const [reviewResponse, setReviewResponse] = useState("");
 
@@ -170,6 +173,14 @@ export default function OwnerDashboard() {
           try {
             const fullReview = await getFullReview(review.id);
             
+            // Preserve user information from the original review if fullReview doesn't have it
+            if (review.user && !fullReview.user) {
+              fullReview.user = review.user;
+            } else if (review.user && fullReview.user) {
+              // Prefer the original review's user info (from list_reviews which has better name handling)
+              fullReview.user = review.user;
+            }
+            
             // Refresh signed URLs for images that don't have them
             if (fullReview.images && fullReview.images.length > 0) {
               fullReview.images = await Promise.all(
@@ -204,8 +215,28 @@ export default function OwnerDashboard() {
     }
   };
 
+  // Filter reviews based on selected filter
+  const filteredReviews = useMemo(() => {
+    if (reviewFilter === "all") return reviews;
+    if (reviewFilter === "with-text") {
+      return reviews.filter((r) => (r.text || r.comment) && (r.text || r.comment).trim().length > 0);
+    }
+    if (reviewFilter.startsWith("star-")) {
+      const target = Number(reviewFilter.split("-")[1]);
+      return reviews.filter((r) => (r.stars || r.rating) === target);
+    }
+    return reviews;
+  }, [reviews, reviewFilter]);
+
   const handleSaveSalon = async () => {
     if (!salonId) return;
+    
+    // Validate description length
+    if (salonUpdates.description && salonUpdates.description.length > DESCRIPTION_MAX_LENGTH) {
+      alert(`Description must be ${DESCRIPTION_MAX_LENGTH} characters or less. Currently ${salonUpdates.description.length} characters.`);
+      return;
+    }
+    
     setSavingSalon(true);
     try {
       await updateSalon(salonId, salonUpdates, logoFile);
@@ -300,7 +331,7 @@ export default function OwnerDashboard() {
     setSearching(true);
     try {
       const res = await searchBarbers(searchTerm);
-      setSearchResults(res.providers || []);
+      setSearchResults(res.barbers || []);
     } catch (error) {
       console.error("Search error:", error);
       setSearchResults([]);
@@ -376,29 +407,33 @@ export default function OwnerDashboard() {
 
   const handleSaveBarberServices = async (barberId) => {
     if (!salonId) return;
-    const selectedServices = pendingServiceSelections[barberId] || [];
+    let selectedServices = pendingServiceSelections[barberId] || [];
     const currentServices = barberServices[barberId] || [];
     const currentServiceIds = currentServices.map(s => s.id);
+    
+    // Deduplicate selectedServices - remove any duplicate service IDs
+    selectedServices = [...new Set(selectedServices)];
     
     const toAdd = selectedServices.filter(id => !currentServiceIds.includes(id));
     const toRemove = currentServiceIds.filter(id => !selectedServices.includes(id));
     
     setSavingServices(true);
     try {
-      await Promise.all(
-        toAdd.map(serviceId => addServiceToBarber(salonId, barberId, serviceId))
-      );
-      
-      if (toRemove.length > 0) {
-        await Promise.all(
-          toRemove.map(serviceId => 
-            api(`/salons/${salonId}/barbers/${barberId}/services/${serviceId}`, {
-              method: "DELETE"
-            }).catch(err => console.error(`Failed to remove service ${serviceId}:`, err))
-          )
-        );
+      // Add new services sequentially (one at a time)
+      for (let i = 0; i < toAdd.length; i++) {
+        const serviceId = toAdd[i];
+        await addServiceToBarber(salonId, barberId, serviceId);
       }
       
+      // Remove services sequentially
+      for (let i = 0; i < toRemove.length; i++) {
+        const serviceId = toRemove[i];
+        await api(`/salons/${salonId}/barbers/${barberId}/services/${serviceId}`, {
+          method: "DELETE"
+        });
+      }
+      
+      // Refresh barber services
       const updatedServices = await getBarberServices(salonId, barberId);
       setBarberServices(prev => ({
         ...prev,
@@ -579,12 +614,23 @@ export default function OwnerDashboard() {
                   />
                 </div>
                 <div>
-                  <Label>Description</Label>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label>Description</Label>
+                    <span className={`text-sm ${salonUpdates.description?.length > DESCRIPTION_MAX_LENGTH ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                      {salonUpdates.description?.length || 0} / {DESCRIPTION_MAX_LENGTH}
+                    </span>
+                  </div>
                   <Textarea
                     value={salonUpdates.description}
                     onChange={(e) => setSalonUpdates({ ...salonUpdates, description: e.target.value })}
                     rows={4}
+                    className={salonUpdates.description?.length > DESCRIPTION_MAX_LENGTH ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
                   />
+                  {salonUpdates.description?.length > DESCRIPTION_MAX_LENGTH && (
+                    <p className="text-sm text-red-600 mt-1 font-medium">
+                      Description exceeds the {DESCRIPTION_MAX_LENGTH} character limit by {salonUpdates.description.length - DESCRIPTION_MAX_LENGTH} characters. Please shorten it to submit.
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -899,7 +945,7 @@ export default function OwnerDashboard() {
           <p className="text-sm text-gray-600">No employees yet. Add your first employee above.</p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {employees.map((emp) => (
+            {employees.filter(emp => emp.is_active !== false).map((emp) => (
               <div key={emp.id} className="flex items-center gap-4 rounded-xl border p-4 bg-white">
                 <img
                   src={emp.avatar || "https://placehold.co/96x96?text=Staff"}
@@ -924,8 +970,9 @@ export default function OwnerDashboard() {
                       {services.filter(s => s && s.id).map((service) => {
                         const currentServices = barberServices[emp.id] || [];
                         const currentServiceIds = currentServices.map(s => s.id);
-                        const pendingSelections = pendingServiceSelections[emp.id] || [];
-                        const isChecked = pendingSelections.length > 0 
+                        const pendingSelections = pendingServiceSelections[emp.id];
+                        // If pendingSelections exists (even if empty array), use it. Otherwise fall back to current services.
+                        const isChecked = pendingSelections !== undefined
                           ? pendingSelections.includes(service.id)
                           : currentServiceIds.includes(service.id);
                         return (
@@ -1016,20 +1063,75 @@ export default function OwnerDashboard() {
 
       {/* Reviews Section - With Response */}
       <div className="bg-white border rounded-2xl p-5">
-        <h2 className="text-lg font-semibold mb-4">Guest Reviews</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Guest Reviews</h2>
+          {reviews.length > 0 && (
+            <div className="text-sm text-gray-600">
+              {reviews.length} {reviews.length === 1 ? "review" : "reviews"}
+            </div>
+          )}
+        </div>
+        
+        {/* Filter Buttons */}
+        {reviews.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              onClick={() => setReviewFilter("all")}
+              className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                reviewFilter === "all"
+                  ? "bg-black text-white border-black"
+                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+              }`}
+            >
+              All reviews
+            </button>
+            {[5, 4, 3, 2, 1].map((star) => (
+              <button
+                key={star}
+                onClick={() => setReviewFilter(`star-${star}`)}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  reviewFilter === `star-${star}`
+                    ? "bg-black text-white border-black"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                }`}
+              >
+                {star} star{star !== 1 ? "s" : ""}
+              </button>
+            ))}
+            {reviews.some((r) => (r.text || r.comment)?.trim()) && (
+              <button
+                onClick={() => setReviewFilter("with-text")}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  reviewFilter === "with-text"
+                    ? "bg-black text-white border-black"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                }`}
+              >
+                With comments
+              </button>
+            )}
+          </div>
+        )}
+        
         {reviews.length === 0 ? (
           <div className="text-center py-8 text-gray-600">
             <p>No reviews yet.</p>
           </div>
+        ) : filteredReviews.length === 0 ? (
+          <div className="text-center py-8 text-gray-600">
+            <p>No reviews match this filter.</p>
+          </div>
         ) : (
           <div className="space-y-4">
-            {reviews.map((review) => (
+            {filteredReviews.map((review) => {
+              const stars = review.stars || review.rating || 0;
+              return (
               <div key={review.id} className="border rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div className="font-medium">{review.user?.name || "Guest"}</div>
                   <div className="text-yellow-500">
-                    {"★".repeat(review.stars)}
-                    <span className="text-gray-300">{"★".repeat(5 - review.stars)}</span>
+                    {"★".repeat(stars)}
+                    <span className="text-gray-300">{"★".repeat(5 - stars)}</span>
                   </div>
                 </div>
                 <p className="text-gray-700 text-sm mb-2">{review.text || review.comment || "No written feedback."}</p>
@@ -1128,7 +1230,8 @@ export default function OwnerDashboard() {
                   </div>
                 )}
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
