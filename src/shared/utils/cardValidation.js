@@ -184,3 +184,12 @@ export function validateBillingAddress(address) {
   return errors;
 }
 
+/**
+ * Validates shipping address fields (same validation as billing)
+ * @param {object} address - Shipping address object
+ * @returns {object} - Object with field errors
+ */
+export function validateShippingAddress(address) {
+  return validateBillingAddress(address);
+}
+
