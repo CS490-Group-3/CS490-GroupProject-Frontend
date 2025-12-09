@@ -210,36 +210,73 @@ pytest test_comprehensive.py -v
 6. Navigate to **Platform Health** - view system status
 7. Navigate to **Profile** - view admin profile
 
-## After Running Tests - Database Cleanup
+## Automatic Test Data Cleanup
 
-After running the tests, you need to clean up the test data from Supabase:
+The tests now include **automatic cleanup** that runs before each test suite. This removes all test salons and related data created by the test owner account.
 
-### Step 1: Delete Barber Availability Records
-Run this SQL query in Supabase SQL Editor (replace the salon_id with the test salon's ID):
+### Setup for Automatic Cleanup
 
-```sql
-DELETE FROM public.barber_availability
-WHERE barber_id IN (
-    SELECT id
-    FROM public.barbers
-    WHERE salon_id = 'YOUR_TEST_SALON_ID_HERE'
-);
+1. **Set environment variables** (get these from your backend `.env` file):
+   ```bash
+   export SUPABASE_URL="your-supabase-url"
+   export SUPABASE_KEY="your-supabase-anon-key"
+   ```
+
+2. **Install cleanup dependency**:
+   ```bash
+   pip install supabase
+   ```
+
+3. **Run tests** - cleanup happens automatically:
+   ```bash
+   python test_comprehensive.py
+   ```
+
+The cleanup script will:
+- Find all salons owned by the test owner (`hifif37383@kudimi.com`)
+- Delete appointments, barber availability, services, and salon hours
+- Unassign barbers from the salon
+- Delete the salon itself
+
+### Manual Cleanup (if automatic cleanup fails)
+
+If automatic cleanup doesn't work, you can manually clean up:
+
+#### Option 1: Run cleanup script directly
+```bash
+export SUPABASE_URL="your-supabase-url"
+export SUPABASE_KEY="your-supabase-anon-key"
+python cleanup_test_data.py
 ```
 
-### Step 2: Manually Delete the Test Salon
-1. Go to Supabase Dashboard → Table Editor
-2. Navigate to the `salons` table
-3. Find the row with the test salon (look for "Test Salon XXXX" name)
-4. Delete the row manually
-
-> **Note:** The salon ID changes each time you run the test. You'll need to find the correct ID in the salons table first, then use it in the SQL query above.
-
-### Step 3: Clean Up Barbers Table (if needed)
-If the unassigned barber was added to the test salon, you may need to remove them:
+#### Option 2: Manual SQL cleanup
+1. Find the test salon ID in Supabase Dashboard → `salons` table (look for "Test Salon XXXX")
+2. Run these SQL queries (replace `YOUR_TEST_SALON_ID_HERE`):
 
 ```sql
-DELETE FROM public.barbers
-WHERE salon_id = 'YOUR_TEST_SALON_ID_HERE';
+-- Delete barber availability
+DELETE FROM public.barber_availability
+WHERE barber_id IN (
+    SELECT id FROM public.barbers WHERE salon_id = 'YOUR_TEST_SALON_ID_HERE'
+);
+
+-- Delete appointments
+DELETE FROM public.appointments
+WHERE barber_id IN (
+    SELECT id FROM public.barbers WHERE salon_id = 'YOUR_TEST_SALON_ID_HERE'
+);
+
+-- Unassign barbers
+UPDATE public.barbers SET salon_id = NULL WHERE salon_id = 'YOUR_TEST_SALON_ID_HERE';
+
+-- Delete services
+DELETE FROM public.services WHERE salon_id = 'YOUR_TEST_SALON_ID_HERE';
+
+-- Delete salon hours
+DELETE FROM public.salon_hours WHERE salon_id = 'YOUR_TEST_SALON_ID_HERE';
+
+-- Finally, delete the salon
+DELETE FROM public.salons WHERE id = 'YOUR_TEST_SALON_ID_HERE';
 ```
 
 ## Common Issues & Fixes
