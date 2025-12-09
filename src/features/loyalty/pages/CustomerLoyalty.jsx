@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "../../../shared/ui/button";
-import { getCustomerPoints, getLoyaltyRewards, redeemPoints } from "../api.js";
+import { getCustomerPoints, getLoyaltyRewards, redeemPoints, getActivePromotions } from "../api.js";
+import { Tag, Calendar } from "lucide-react";
 
 export default function Loyalty() {
   const [salonBalances, setSalonBalances] = useState([]); // Array of { salon_id, salon_name, balance, activity }
@@ -9,6 +10,8 @@ export default function Loyalty() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [redeeming, setRedeeming] = useState(false);
+  const [calculatingPending, setCalculatingPending] = useState(true);
+  const [promotionsBySalon, setPromotionsBySalon] = useState({}); // { salon_id: [promotions] }
 
   useEffect(() => {
     let alive = true;
@@ -16,6 +19,7 @@ export default function Loyalty() {
       try {
         setLoading(true);
         setError("");
+        // Load main loyalty data first (critical)
         const pointsData = await getCustomerPoints();
         if (!alive) return;
         
@@ -42,6 +46,94 @@ export default function Loyalty() {
         if (balances.length > 0 && balances[0].salon_id) {
           setSelectedSalonId(balances[0].salon_id);
         }
+        
+        // Load promotions for all salons asynchronously
+        (async () => {
+          try {
+            const { getActivePromotions } = await import("../api.js");
+            const promotionsMap = {};
+            await Promise.all(
+              balances.map(async (salon) => {
+                try {
+                  const promotions = await getActivePromotions(salon.salon_id, 0);
+                  promotionsMap[salon.salon_id] = promotions || [];
+                } catch (err) {
+                  console.error(`Failed to load promotions for salon ${salon.salon_id}:`, err);
+                  promotionsMap[salon.salon_id] = [];
+                }
+              })
+            );
+            if (!alive) return;
+            setPromotionsBySalon(promotionsMap);
+          } catch (err) {
+            console.error("Error loading promotions:", err);
+          }
+        })();
+        
+        // Calculate pending points asynchronously (non-critical - load last)
+        setCalculatingPending(true);
+        (async () => {
+          try {
+            const { listUserAppointments } = await import("../../booking/api.js");
+            const { api } = await import("../../../shared/api/client.js");
+            const { getPotentialPoints } = await import("../api.js");
+            
+            const [appointmentsRes, ordersRes] = await Promise.all([
+              listUserAppointments().catch(() => ({ upcoming: [], past: [] })),
+              api("/orders").then(res => res.orders || []).catch(() => [])
+            ]);
+            
+            if (!alive) return;
+            
+            const appointments = [...(appointmentsRes.upcoming || []), ...(appointmentsRes.past || [])];
+            const orders = ordersRes || [];
+            
+            // Calculate pending points per salon
+            const pendingPointsBySalon = {};
+            
+            // Calculate from scheduled appointments
+            for (const apt of appointments) {
+              if ((apt.status === "scheduled" || apt.status === "confirmed") && 
+                  apt.payment_status === "completed" && 
+                  apt.salon_id && 
+                  apt.payment?.amount) {
+                const salonId = apt.salon_id;
+                const amount = parseFloat(apt.payment.amount) || 0;
+                if (amount > 0) {
+                  const points = await getPotentialPoints(salonId, amount);
+                  pendingPointsBySalon[salonId] = (pendingPointsBySalon[salonId] || 0) + points;
+                }
+              }
+            }
+            
+            // Calculate from pending orders
+            for (const order of orders) {
+              if (order.order_status && 
+                  !["delivered", "cancelled"].includes(order.order_status) &&
+                  order.salon_id && 
+                  order.total_amount) {
+                const salonId = order.salon_id;
+                const amount = parseFloat(order.total_amount) || 0;
+                if (amount > 0) {
+                  const points = await getPotentialPoints(salonId, amount);
+                  pendingPointsBySalon[salonId] = (pendingPointsBySalon[salonId] || 0) + points;
+                }
+              }
+            }
+            
+            if (!alive) return;
+            
+            // Update balances with pending points
+            setSalonBalances(prev => prev.map(salon => ({
+              ...salon,
+              pending_points: pendingPointsBySalon[salon.salon_id] || 0
+            })));
+          } catch (err) {
+            console.error("Error calculating pending points:", err);
+          } finally {
+            if (alive) setCalculatingPending(false);
+          }
+        })();
       } catch (err) {
         if (!alive) return;
         setError(err.message || "Failed to load loyalty data");
@@ -61,7 +153,7 @@ export default function Loyalty() {
     let alive = true;
     (async () => {
       try {
-        const rewardsData = await getLoyaltyRewards(selectedSalonId);
+        const rewardsData = await getLoyaltyRewards(selectedSalonId).catch(() => null);
         if (!alive) return;
         setRewards(rewardsData);
       } catch (err) {
@@ -131,7 +223,7 @@ export default function Loyalty() {
     return (
       <div className="max-w-6xl mx-auto p-6">
         <div className="bg-white border rounded-2xl p-8 text-center">
-          <div className="text-gray-600">Loading loyalty data...</div>
+          <div className="text-gray-600">Loading loyalty data... (may take a while...)</div>
         </div>
       </div>
     );
@@ -170,25 +262,97 @@ export default function Loyalty() {
         <p className="text-gray-600">Track your loyalty points and redeem rewards at each salon</p>
       </div>
 
+      {/* Promotional Offers - All Salons Overview */}
+      {Object.keys(promotionsBySalon).length > 0 && Object.values(promotionsBySalon).some(promos => promos.length > 0) && (
+        <div className="bg-white border rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Active Promotions</h2>
+          <div className="space-y-4">
+            {salonBalances.map((salon) => {
+              const salonPromotions = promotionsBySalon[salon.salon_id] || [];
+              if (salonPromotions.length === 0) return null;
+              
+              return (
+                <div key={salon.salon_id} className="border rounded-xl p-4 bg-gray-50">
+                  <h3 className="font-semibold text-gray-900 mb-3">{salon.salon_name || "Salon"}</h3>
+                  <div className="space-y-2">
+                    {salonPromotions.map((promotion) => {
+                      const discountText = promotion.discount_type === "percentage" 
+                        ? `${promotion.discount_value}% off`
+                        : `$${promotion.discount_value} off`;
+                      
+                      const validFrom = new Date(promotion.valid_from);
+                      const validUntil = new Date(promotion.valid_until);
+                      const now = new Date();
+                      const isActive = now >= validFrom && now <= validUntil;
+                      
+                      return (
+                        <div
+                          key={promotion.id}
+                          className={`border rounded-lg p-3 ${
+                            isActive ? "bg-green-50 border-green-200" : "bg-white border-gray-200"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Tag className="h-3 w-3 text-indigo-600" />
+                                <h4 className="font-medium text-gray-900 text-sm">{promotion.title}</h4>
+                                <span className="px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                                  {discountText}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-600 mb-2">{promotion.description}</p>
+                              <div className="flex items-center gap-3 text-xs text-gray-500">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  <span>
+                                    {validFrom.toLocaleDateString()} - {validUntil.toLocaleDateString()}
+                                  </span>
+                                </div>
+                                {promotion.min_purchase_amount > 0 && (
+                                  <span>Min: ${promotion.min_purchase_amount}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Salon Selection */}
       {salonBalances.length > 1 && (
         <div className="bg-white border rounded-2xl p-5">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Salon</h2>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {salonBalances.map((salon) => (
-              <button
-                key={salon.salon_id}
-                onClick={() => setSelectedSalonId(salon.salon_id)}
-                className={`rounded-xl border p-4 text-left transition-all ${
-                  selectedSalonId === salon.salon_id
-                    ? "ring-2 ring-indigo-600 border-indigo-600 bg-indigo-50"
-                    : "hover:bg-gray-50"
-                }`}
-              >
-                <div className="font-medium text-gray-900">{salon.salon_name || "Salon"}</div>
-                <div className="text-sm text-gray-600 mt-1">{salon.balance} points</div>
-              </button>
-            ))}
+            {salonBalances.map((salon) => {
+              const promotionCount = (promotionsBySalon[salon.salon_id] || []).length;
+              return (
+                <button
+                  key={salon.salon_id}
+                  onClick={() => setSelectedSalonId(salon.salon_id)}
+                  className={`rounded-xl border p-4 text-left transition-all ${
+                    selectedSalonId === salon.salon_id
+                      ? "ring-2 ring-indigo-600 border-indigo-600 bg-indigo-50"
+                      : "hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="font-medium text-gray-900">{salon.salon_name || "Salon"}</div>
+                  <div className="text-sm text-gray-600 mt-1">{salon.balance} points</div>
+                  {promotionCount > 0 && (
+                    <div className="text-xs text-indigo-600 mt-1 font-medium">
+                      {promotionCount} active promotion{promotionCount !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -213,7 +377,7 @@ export default function Loyalty() {
               <div className="text-sm text-gray-600 mb-2">{selectedSalon.salon_name || "Salon"}</div>
               <div className="text-5xl font-bold text-gray-900 mb-2">{currentBalance}</div>
               <div className="text-lg text-gray-600 mb-4">Loyalty Points</div>
-              <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t">
+              <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t">
                 <div>
                   <div className="text-sm text-gray-500">Lifetime Earned</div>
                   <div className="text-lg font-semibold text-gray-900">{selectedSalon.lifetime_points_earned || 0}</div>
@@ -222,10 +386,73 @@ export default function Loyalty() {
                   <div className="text-sm text-gray-500">Lifetime Redeemed</div>
                   <div className="text-lg font-semibold text-gray-900">{selectedSalon.lifetime_points_redeemed || 0}</div>
                 </div>
+                <div>
+                  <div className="text-sm text-gray-500">Pending</div>
+                  <div className="text-lg font-semibold text-amber-600">
+                    {calculatingPending ? "Calculating..." : (selectedSalon.pending_points || 0)}
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-gray-500 mt-4">Points are salon-specific and cannot be transferred</p>
+              {!calculatingPending && selectedSalon.pending_points > 0 && (
+                <p className="text-xs text-amber-600 mt-2">
+                  {selectedSalon.pending_points} points will be added when your appointments/orders are completed
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-2">Points are salon-specific and cannot be transferred</p>
             </div>
           </div>
+
+      {/* Promotional Offers - Show for selected salon */}
+      {selectedSalonId && promotionsBySalon[selectedSalonId] && promotionsBySalon[selectedSalonId].length > 0 && (
+        <div className="bg-white border rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Active Promotions</h2>
+          <div className="space-y-3">
+            {promotionsBySalon[selectedSalonId].map((promotion) => {
+              const discountText = promotion.discount_type === "percentage" 
+                ? `${promotion.discount_value}% off`
+                : `$${promotion.discount_value} off`;
+              
+              const validFrom = new Date(promotion.valid_from);
+              const validUntil = new Date(promotion.valid_until);
+              const now = new Date();
+              const isActive = now >= validFrom && now <= validUntil;
+              
+              return (
+                <div
+                  key={promotion.id}
+                  className={`border rounded-xl p-4 ${
+                    isActive ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Tag className="h-4 w-4 text-indigo-600" />
+                        <h3 className="font-semibold text-gray-900">{promotion.title}</h3>
+                        <span className="px-2 py-1 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                          {discountText}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">{promotion.description}</p>
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          <span>
+                            {validFrom.toLocaleDateString()} - {validUntil.toLocaleDateString()}
+                          </span>
+                        </div>
+                        {promotion.min_purchase_amount > 0 && (
+                          <span>Min purchase: ${promotion.min_purchase_amount}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Available Reward */}
       <div className="bg-white border rounded-2xl p-6">

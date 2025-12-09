@@ -4,7 +4,8 @@ import { Input } from "../../../shared/ui/input.jsx";
 import { Label } from "../../../shared/ui/label.jsx";
 import { Card } from "../../../shared/ui/card.jsx";
 import { getSavedPaymentMethods } from "../api.js";
-import { getLoyaltyRewards, getCustomerPoints } from "../../loyalty/api.js";
+import { getLoyaltyRewards, getCustomerPoints, getPotentialPoints } from "../../loyalty/api.js";
+import { getActivePromotions as getShopPromotions } from "../../shop/api.js";
 import {
   luhnValidate,
   detectCardBrand,
@@ -50,8 +51,12 @@ export default function PaymentForm({
   const [formErrors, setFormErrors] = useState({});
   const [loyaltyBalance, setLoyaltyBalance] = useState(0);
   const [loyaltyRewards, setLoyaltyRewards] = useState(null);
+  const [potentialPoints, setPotentialPoints] = useState(0);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [finalAmount, setFinalAmount] = useState(amount);
+  const [promotions, setPromotions] = useState([]);
+  const [selectedPromotion, setSelectedPromotion] = useState(null);
+  const [promotionDiscount, setPromotionDiscount] = useState(0);
 
   // Load saved payment methods and loyalty info
   useEffect(() => {
@@ -68,6 +73,9 @@ export default function PaymentForm({
         setSavedMethods(methods);
         if (methods.length > 0 && !useNewCard) {
           setSelectedMethod(methods.find(m => m.is_default) || methods[0]);
+        } else if (methods.length === 0) {
+          // If no saved methods, automatically use new card entry
+          setUseNewCard(true);
         }
         
         if (showLoyaltyRedemption && salonId && points.length > 0) {
@@ -76,12 +84,33 @@ export default function PaymentForm({
             setLoyaltyBalance(salonPoints.balance || 0);
           }
           
-          // Get loyalty rewards config
+          // Get loyalty rewards config and promotions in parallel
           try {
-            const rewards = await getLoyaltyRewards(salonId);
+            const [rewards, promotionsRes] = await Promise.all([
+              getLoyaltyRewards(salonId).catch(() => null),
+              getShopPromotions(salonId, amount).catch(() => ({ promotions: [] }))
+            ]);
+            if (!alive) return;
             setLoyaltyRewards(rewards);
+            setPromotions(promotionsRes?.promotions || []);
           } catch (err) {
-            console.error("Failed to load loyalty rewards:", err);
+            console.error("Failed to load loyalty rewards/promotions:", err);
+          }
+          
+          // Calculate potential points
+          if (amount > 0) {
+            const points = await getPotentialPoints(salonId, amount);
+            if (!alive) return;
+            setPotentialPoints(points);
+          }
+        } else if (salonId && amount > 0) {
+          // Load promotions even if loyalty redemption is disabled
+          try {
+            const promotionsRes = await getShopPromotions(salonId, amount);
+            if (!alive) return;
+            setPromotions(promotionsRes?.promotions || []);
+          } catch (err) {
+            console.error("Failed to load promotions:", err);
           }
         }
       } catch (err) {
@@ -92,17 +121,39 @@ export default function PaymentForm({
     return () => { alive = false; };
   }, [salonId, showLoyaltyRedemption, useNewCard]);
 
-  // Calculate discount when loyalty redemption is toggled
+  // Calculate promotion discount
   useEffect(() => {
+    if (selectedPromotion && amount > 0) {
+      const promotion = promotions.find(p => p.id === selectedPromotion);
+      if (promotion) {
+        let discount = 0;
+        if (promotion.discount_type === "percentage") {
+          discount = amount * (promotion.discount_value / 100);
+        } else if (promotion.discount_type === "fixed_amount") {
+          discount = Math.min(promotion.discount_value, amount);
+        }
+        setPromotionDiscount(discount);
+      } else {
+        setPromotionDiscount(0);
+      }
+    } else {
+      setPromotionDiscount(0);
+    }
+  }, [selectedPromotion, promotions, amount]);
+
+  // Calculate discount when loyalty redemption or promotion changes
+  useEffect(() => {
+    const baseAmount = amount - promotionDiscount;
     if (redeemLoyaltyPoints && loyaltyRewards && loyaltyBalance >= loyaltyRewards.pointThreshold) {
-      const discount = (amount * loyaltyRewards.rewardDiscount) / 100;
+      // Apply loyalty discount to amount after promotion
+      const discount = (baseAmount * loyaltyRewards.rewardDiscount) / 100;
       setDiscountAmount(discount);
-      setFinalAmount(Math.max(0, amount - discount));
+      setFinalAmount(Math.max(0, baseAmount - discount));
     } else {
       setDiscountAmount(0);
-      setFinalAmount(amount);
+      setFinalAmount(Math.max(0, baseAmount));
     }
-  }, [redeemLoyaltyPoints, loyaltyRewards, loyaltyBalance, amount]);
+  }, [redeemLoyaltyPoints, loyaltyRewards, loyaltyBalance, amount, promotionDiscount]);
 
   const formatCardNumber = (value) => {
     const cleaned = value.replace(/\s/g, "");
@@ -127,12 +178,15 @@ export default function PaymentForm({
   const validateForm = () => {
     const errors = {};
     
-    if (!useNewCard && !selectedMethod) {
+    // If no saved methods, must use new card
+    const shouldUseNewCard = useNewCard || savedMethods.length === 0;
+    
+    if (!shouldUseNewCard && !selectedMethod) {
       setError("Please select a payment method");
       return false;
     }
     
-    if (useNewCard) {
+    if (shouldUseNewCard) {
       // Card number validation
       const cardNumberClean = cardNumber.replace(/\s/g, "");
       if (!cardNumberClean) {
@@ -200,10 +254,12 @@ export default function PaymentForm({
       // Otherwise, use existing appointmentId
       if (appointmentData) {
         const paymentData = {
-          redeem_loyalty_points: redeemLoyaltyPoints
+          redeem_loyalty_points: redeemLoyaltyPoints,
+          promotion_id: selectedPromotion || null
         };
         
-        if (useNewCard) {
+        const shouldUseNewCard = useNewCard || savedMethods.length === 0;
+        if (shouldUseNewCard) {
           paymentData.card_number = cardNumber.replace(/\s/g, "");
           paymentData.exp_month = parseInt(expMonth);
           paymentData.exp_year = parseInt(expYear);
@@ -223,10 +279,12 @@ export default function PaymentForm({
         // Existing appointment - just process payment
         const paymentData = {
           appointment_id: appointmentId,
-          redeem_loyalty_points: redeemLoyaltyPoints
+          redeem_loyalty_points: redeemLoyaltyPoints,
+          promotion_id: selectedPromotion || null
         };
         
-        if (useNewCard) {
+        const shouldUseNewCard = useNewCard || savedMethods.length === 0;
+        if (shouldUseNewCard) {
           paymentData.card_number = cardNumber.replace(/\s/g, "");
           paymentData.exp_month = parseInt(expMonth);
           paymentData.exp_year = parseInt(expYear);
@@ -260,6 +318,52 @@ export default function PaymentForm({
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-800 text-sm">
           {error}
         </div>
+      )}
+
+      {/* Promotional Offers */}
+      {promotions.length > 0 && (
+        <Card className="p-4">
+          <Label className="text-base font-semibold mb-3 block">Available Promotions</Label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="promotion"
+                checked={!selectedPromotion}
+                onChange={() => setSelectedPromotion(null)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm">No promotion</span>
+            </label>
+            {promotions.map((promotion) => {
+              const discountText = promotion.discount_type === "percentage" 
+                ? `${promotion.discount_value}% off`
+                : `$${promotion.discount_value} off`;
+              
+              return (
+                <label key={promotion.id} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="promotion"
+                    checked={selectedPromotion === promotion.id}
+                    onChange={() => setSelectedPromotion(promotion.id)}
+                    className="w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium">{promotion.title}</span>
+                    <p className="text-xs text-gray-500">{promotion.description}</p>
+                    {promotionDiscount > 0 && selectedPromotion === promotion.id && (
+                      <p className="text-xs text-green-600">
+                        You'll save ${promotionDiscount.toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs font-medium text-indigo-600">{discountText}</span>
+                </label>
+              );
+            })}
+          </div>
+        </Card>
       )}
 
       {/* Loyalty Points Redemption */}
@@ -301,6 +405,12 @@ export default function PaymentForm({
             <span className="text-gray-600">Subtotal</span>
             <span className="font-medium">${amount.toFixed(2)}</span>
           </div>
+          {promotionDiscount > 0 && (
+            <div className="flex justify-between text-sm text-green-600">
+              <span>Promotion Discount</span>
+              <span className="font-medium">-${promotionDiscount.toFixed(2)}</span>
+            </div>
+          )}
           {redeemLoyaltyPoints && discountAmount > 0 && (
             <div className="flex justify-between text-sm text-green-600">
               <span>Loyalty Discount ({loyaltyRewards?.rewardDiscount}%)</span>
@@ -311,6 +421,14 @@ export default function PaymentForm({
             <span>Total</span>
             <span>${finalAmount.toFixed(2)}</span>
           </div>
+          {potentialPoints > 0 && (
+            <div className="pt-2 border-t">
+              <div className="flex items-center gap-2 text-sm text-indigo-600 font-medium">
+                <span>🎁</span>
+                <span>You'll earn {potentialPoints} loyalty points after completion of this appointment!</span>
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 

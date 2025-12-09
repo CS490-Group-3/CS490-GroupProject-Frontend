@@ -22,7 +22,6 @@ import {
 import {
   getEngagementMetrics,
   getAppointmentMetrics,
-  getRevenueMetrics,
   getLoyaltyMetrics,
   getRetentionMetrics,
   getPlatformMetrics,
@@ -145,19 +144,6 @@ export default function AdminAnalytics() {
               })
           );
         }
-        if (activeTab === "revenue" || activeTab === "all") {
-          metricsPromises.push(
-            getRevenueMetrics(startDate, endDate)
-              .then((data) => ({
-                key: "revenue",
-                data: data?.metrics || data,
-              }))
-              .catch((err) => {
-                console.error("Failed to load revenue metrics:", err);
-                return { key: "revenue", data: null };
-              })
-          );
-        }
         if (activeTab === "loyalty" || activeTab === "all") {
           metricsPromises.push(
             getLoyaltyMetrics(startDate, endDate)
@@ -210,7 +196,6 @@ export default function AdminAnalytics() {
           "platform",
           "engagement",
           "appointments",
-          "revenue",
           "loyalty",
           "retention",
           "demographics",
@@ -345,11 +330,10 @@ export default function AdminAnalytics() {
           setSearchParams({ tab: value });
         }}
       >
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="platform">Platform</TabsTrigger>
           <TabsTrigger value="engagement">Engagement</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
-          <TabsTrigger value="revenue">Revenue</TabsTrigger>
           <TabsTrigger value="demographics">Demographics</TabsTrigger>
           <TabsTrigger value="loyalty">Loyalty</TabsTrigger>
           <TabsTrigger value="retention">Retention</TabsTrigger>
@@ -562,26 +546,6 @@ export default function AdminAnalytics() {
           )}
         </TabsContent>
 
-        <TabsContent value="revenue" className="space-y-4">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <Clock className="h-8 w-8 animate-spin text-indigo-600" />
-            </div>
-          ) : metrics.revenue ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {renderMetricCard("Total Revenue", `$${metrics.revenue.total_revenue?.toLocaleString() || "—"}`, DollarSign)}
-              {renderMetricCard("Avg Transaction", `$${metrics.revenue.avg_transaction_value || "—"}`, TrendingUp)}
-              {renderMetricCard("Platform Fees", `$${metrics.revenue.platform_fee_revenue?.toLocaleString() || "—"}`, DollarSign)}
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="py-12 text-center text-gray-500">
-                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p>No revenue metrics available for the selected date range.</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
 
         <TabsContent value="demographics" className="space-y-4">
           {loading ? (
@@ -849,11 +813,51 @@ export default function AdminAnalytics() {
               <Clock className="h-8 w-8 animate-spin text-indigo-600" />
             </div>
           ) : metrics.loyalty ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {renderMetricCard("Active Members", metrics.loyalty.active_members, Users)}
-              {renderMetricCard("Points Earned", metrics.loyalty.points_earned?.toLocaleString() || "—", Award)}
-              {renderMetricCard("Points Redeemed", metrics.loyalty.points_redeemed?.toLocaleString() || "—", Award)}
-            </div>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {renderMetricCard("Active Members", metrics.loyalty.active_members || 0, Users)}
+                {renderMetricCard("Points Earned", (metrics.loyalty.total_points_earned || metrics.loyalty.points_earned || 0).toLocaleString(), Award)}
+                {renderMetricCard("Points Redeemed", (metrics.loyalty.total_points_redeemed || metrics.loyalty.points_redeemed || 0).toLocaleString(), Award)}
+              </div>
+              
+              {/* Daily Breakdown Table */}
+              {metrics.loyalty.daily_breakdown && metrics.loyalty.daily_breakdown.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Daily Breakdown</CardTitle>
+                    <CardDescription>Loyalty points activity by day</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-700">Date</th>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-700">Points Earned</th>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-700">Points Redeemed</th>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-700">Net Points</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {metrics.loyalty.daily_breakdown.map((day) => (
+                            <tr key={day.date} className="border-b last:border-b-0">
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                {day.date ? new Date(day.date).toLocaleDateString() : "—"}
+                              </td>
+                              <td className="px-3 py-2">{day.loyalty_points_earned ?? 0}</td>
+                              <td className="px-3 py-2">{day.loyalty_points_redeemed ?? 0}</td>
+                              <td className="px-3 py-2">
+                                {(day.loyalty_points_earned || 0) - (day.loyalty_points_redeemed || 0)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           ) : (
             <Card>
               <CardContent className="py-12 text-center text-gray-500">

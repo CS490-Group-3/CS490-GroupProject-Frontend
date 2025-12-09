@@ -25,6 +25,8 @@ export default function SalonSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
+  const DESCRIPTION_MAX_LENGTH = 255;
+  
   const [salonData, setSalonData] = useState({
     name: "",
     description: "",
@@ -106,6 +108,13 @@ export default function SalonSettings() {
 
   const handleSaveSalon = async () => {
     if (!salonId) return;
+    
+    // Validate description length
+    if (salonData.description && salonData.description.length > DESCRIPTION_MAX_LENGTH) {
+      alert(`Description must be ${DESCRIPTION_MAX_LENGTH} characters or less. Currently ${salonData.description.length} characters.`);
+      return;
+    }
+    
     setSaving(true);
     try {
       await updateSalon(salonId, salonData, logoFile);
@@ -165,12 +174,23 @@ export default function SalonSettings() {
           </div>
           
           <div>
-            <Label>Description</Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label>Description</Label>
+              <span className={`text-sm ${salonData.description.length > DESCRIPTION_MAX_LENGTH ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                {salonData.description.length} / {DESCRIPTION_MAX_LENGTH}
+              </span>
+            </div>
             <Textarea
               value={salonData.description}
               onChange={(e) => setSalonData({ ...salonData, description: e.target.value })}
               rows={4}
+              className={salonData.description.length > DESCRIPTION_MAX_LENGTH ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}
             />
+            {salonData.description.length > DESCRIPTION_MAX_LENGTH && (
+              <p className="text-sm text-red-600 mt-1 font-medium">
+                Description exceeds the {DESCRIPTION_MAX_LENGTH} character limit by {salonData.description.length - DESCRIPTION_MAX_LENGTH} characters. Please shorten it to submit.
+              </p>
+            )}
           </div>
           
           <div>

@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/auth-provider.jsx";
-import { getCurrentUserProfile, updateUserProfile } from "../api.js";
+import { getCurrentUserProfile, updateUserProfile, uploadProfileImage } from "../api.js";
 import { listUserAppointments } from "../../booking/api.js";
 import { Card } from "../../../shared/ui/card.jsx";
 import { Button } from "../../../shared/ui/button.jsx";
@@ -12,6 +12,7 @@ import { Badge } from "../../../shared/ui/badge.jsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../shared/ui/select.jsx";
 import { ImageWithFallback } from "../../../shared/ui/ImageWithFallback.jsx";
 import SavedPaymentMethods from "../../payments/pages/SavedPaymentMethods.jsx";
+import { Upload, X } from "lucide-react";
 
 const AGE_BRACKETS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
 const GENDERS = ["male", "female", "non-binary", "prefer-not-to-say", "other"];
@@ -33,6 +34,8 @@ export default function Profile() {
   // Form states
   const [profileForm, setProfileForm] = useState({});
   const [fieldErrors, setFieldErrors] = useState({});
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
 
   const userRole = user?.role;
   const isCustomer = userRole === "customer";
@@ -336,13 +339,10 @@ export default function Profile() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className={`grid w-full mb-8 ${tabs.length === 1 ? "grid-cols-1" : tabs.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+        <TabsList className={`grid w-full mb-8 ${isCustomer ? "grid-cols-2" : "grid-cols-1"}`}>
           <TabsTrigger value="profile">Profile Info</TabsTrigger>
           {isCustomer && (
-            <>
-              <TabsTrigger value="history">Visit History</TabsTrigger>
-              <TabsTrigger value="payment-methods">Payment Methods</TabsTrigger>
-            </>
+            <TabsTrigger value="payment-methods">Payment Methods</TabsTrigger>
           )}
         </TabsList>
 
@@ -369,9 +369,9 @@ export default function Profile() {
 
             {/* Profile Image */}
             <div className="mb-6">
-              <Label>Profile Image URL</Label>
+              <Label>Profile Image</Label>
               <div className="flex items-center gap-4 mt-2">
-                <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+                <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
                   {profileForm.profile_image_url ? (
                     <ImageWithFallback
                       src={profileForm.profile_image_url}
@@ -383,7 +383,98 @@ export default function Profile() {
                   )}
                 </div>
                 {isEditingProfile && (
-                  <div className="flex-1">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          
+                          // Validate file size (max 5MB)
+                          if (file.size > 5 * 1024 * 1024) {
+                            setError("Image size must be less than 5MB");
+                            return;
+                          }
+                          
+                          // Validate file type
+                          if (!file.type.startsWith("image/")) {
+                            setError("Please select an image file");
+                            return;
+                          }
+                          
+                          setUploadingImage(true);
+                          setError(null);
+                          try {
+                            const result = await uploadProfileImage(file);
+                            const imageUrl = result.url || result.public_url;
+                            
+                            // Update profile with new image URL
+                            await updateUserProfile({ profile_image_url: imageUrl });
+                            
+                            // Update form and profile state
+                            setProfileForm({ ...profileForm, profile_image_url: imageUrl });
+                            setProfile({ ...profile, profile_image_url: imageUrl });
+                            
+                            // Update auth context
+                            if (updateUser) {
+                              updateUser({ profile_image_url: imageUrl });
+                            }
+                            
+                            setSuccessMessage("Profile image uploaded successfully!");
+                            setTimeout(() => setSuccessMessage(null), 3000);
+                          } catch (err) {
+                            setError(err.message || "Failed to upload image");
+                          } finally {
+                            setUploadingImage(false);
+                            // Reset file input
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = "";
+                            }
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingImage}
+                        className="flex items-center gap-2"
+                      >
+                        <Upload className="h-4 w-4" />
+                        {uploadingImage ? "Uploading..." : "Upload Image"}
+                      </Button>
+                      {profileForm.profile_image_url && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              await updateUserProfile({ profile_image_url: null });
+                              setProfileForm({ ...profileForm, profile_image_url: "" });
+                              setProfile({ ...profile, profile_image_url: null });
+                              if (updateUser) {
+                                updateUser({ profile_image_url: null });
+                              }
+                              setSuccessMessage("Profile image removed");
+                              setTimeout(() => setSuccessMessage(null), 3000);
+                            } catch (err) {
+                              setError(err.message || "Failed to remove image");
+                            }
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          <X className="h-4 w-4" />
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Upload an image file (JPG, PNG, etc.) or enter a URL below
+                    </p>
                     <Input
                       id="profile_image_url"
                       type="url"
@@ -392,7 +483,7 @@ export default function Profile() {
                       placeholder="https://example.com/image.jpg"
                       className="max-w-md"
                     />
-                    <p className="text-xs text-gray-500 mt-1">Enter a URL to your profile image</p>
+                    <p className="text-xs text-gray-500">Or enter a URL to your profile image</p>
                   </div>
                 )}
               </div>
@@ -588,102 +679,6 @@ export default function Profile() {
             )}
           </Card>
         </TabsContent>
-
-        {/* Visit History Tab - Customer Only */}
-        {isCustomer && (
-          <TabsContent value="history" className="space-y-6">
-            <Card className="p-6">
-              <h2 className="text-2xl font-semibold mb-6">Appointment History</h2>
-
-              {appointments.past && appointments.past.length > 0 ? (
-                <div className="space-y-4">
-                  {appointments.past.map((appt) => (
-                    <div
-                      key={appt.id}
-                      className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-semibold text-lg">{appt.salon?.name}</h3>
-                            <Badge variant={appt.status === "completed" ? "default" : "outline"}>
-                              {appt.status}
-                            </Badge>
-                          </div>
-                          <p className="text-gray-600 text-sm mb-1">{appt.salon?.address}</p>
-                          <p className="text-gray-700 mb-1">
-                            <span className="font-medium">Service:</span> {appt.service?.name}
-                          </p>
-                          <p className="text-gray-700 mb-1">
-                            <span className="font-medium">Provider:</span> {appt.employee?.name}
-                          </p>
-                          <p className="text-gray-700">
-                            <span className="font-medium">Date:</span>{" "}
-                            {appt.whenISO ? new Date(appt.whenISO).toLocaleDateString() : "N/A"} at{" "}
-                            {appt.whenISO ? new Date(appt.whenISO).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"}
-                          </p>
-                          {appt.cancellation_reason && (
-                            <p className="text-red-600 text-sm mt-2">
-                              <span className="font-medium">Cancellation reason:</span> {appt.cancellation_reason}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xl font-bold">${appt.service?.price || "N/A"}</p>
-                          <p className="text-sm text-gray-500">{appt.payment_status || "N/A"}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 text-gray-500">
-                  <p>No appointment history yet.</p>
-                  <p className="text-sm mt-2">Book your first appointment to see it here!</p>
-                </div>
-              )}
-            </Card>
-
-            {appointments.upcoming && appointments.upcoming.length > 0 && (
-              <Card className="p-6">
-                <h2 className="text-2xl font-semibold mb-6">Upcoming Appointments</h2>
-                <div className="space-y-4">
-                  {appointments.upcoming.map((appt) => (
-                    <div
-                      key={appt.id}
-                      className="p-4 border border-blue-200 bg-blue-50 rounded-lg"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-semibold text-lg">{appt.salon?.name}</h3>
-                            <Badge variant="default">{appt.status}</Badge>
-                          </div>
-                          <p className="text-gray-600 text-sm mb-1">{appt.salon?.address}</p>
-                          <p className="text-gray-700 mb-1">
-                            <span className="font-medium">Service:</span> {appt.service?.name}
-                          </p>
-                          <p className="text-gray-700 mb-1">
-                            <span className="font-medium">Provider:</span> {appt.employee?.name}
-                          </p>
-                          <p className="text-gray-700">
-                            <span className="font-medium">Date:</span>{" "}
-                            {appt.whenISO ? new Date(appt.whenISO).toLocaleDateString() : "N/A"} at{" "}
-                            {appt.whenISO ? new Date(appt.whenISO).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xl font-bold">${appt.service?.price || "N/A"}</p>
-                          <p className="text-sm text-gray-500">{appt.payment_status || "N/A"}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-          </TabsContent>
-        )}
 
         {/* Payment Methods Tab - Customer Only */}
         {isCustomer && (

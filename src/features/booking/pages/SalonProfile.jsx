@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { getSalon, getSalonReviews, getFullReview, refreshSignedUrl } from "../api.js";
 import BookingWizardModal from "../widgets/BookingWizardModal.jsx";
 import { useAuth } from "../../auth/auth-provider.jsx";
+import SalonShop from "../../shop/pages/SalonShop.jsx";
 
 export default function SalonProfile() {
   const { id } = useParams();
@@ -12,6 +13,7 @@ export default function SalonProfile() {
   const [reviewFilter, setReviewFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [openWizard, setOpenWizard] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     let alive = true;
@@ -27,6 +29,14 @@ export default function SalonProfile() {
           r.map(async (review) => {
             try {
               const fullReview = await getFullReview(review.id);
+              
+              // Preserve user information from the original review if fullReview doesn't have it
+              if (review.user && !fullReview.user) {
+                fullReview.user = review.user;
+              } else if (review.user && fullReview.user) {
+                // Prefer the original review's user info (from list_reviews which has better name handling)
+                fullReview.user = review.user;
+              }
               
               // Refresh signed URLs for images that don't have them
               if (fullReview.images && fullReview.images.length > 0) {
@@ -116,7 +126,34 @@ export default function SalonProfile() {
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <Link to={backPath} className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50">&larr; Back to all salons</Link>
 
-      <div className="bg-white border rounded-2xl p-5">
+      {/* Tabs */}
+      <div className="bg-white border rounded-2xl">
+        <div className="flex border-b">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`flex-1 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "overview"
+                ? "border-black text-black"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveTab("shop")}
+            className={`flex-1 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "shop"
+                ? "border-black text-black"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Shop
+          </button>
+        </div>
+
+        <div className="p-5">
+          {activeTab === "overview" && (
+            <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <img src={heroImage} alt={salon.name} className="rounded-xl w-full h-56 object-cover md:col-span-1" />
           <div className="md:col-span-2 space-y-2">
@@ -206,9 +243,17 @@ export default function SalonProfile() {
         {openWizard && (
             <BookingWizardModal salon={salon} onClose={() => setOpenWizard(false)} />
         )}
+            </div>
+          )}
+
+          {activeTab === "shop" && (
+            <SalonShop />
+          )}
+        </div>
       </div>
 
-      <ReviewSection
+      {activeTab === "overview" && (
+        <ReviewSection
         salon={salon}
         reviews={filteredReviews}
         totalReviews={reviewsCount}
@@ -216,7 +261,8 @@ export default function SalonProfile() {
         activeFilter={reviewFilter}
         onFilterChange={setReviewFilter}
         hasWrittenReviews={reviews.some((r) => (r.text || r.comment)?.trim())}
-      />
+        />
+      )}
     </div>
   );
 }

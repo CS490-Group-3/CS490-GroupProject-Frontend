@@ -47,6 +47,20 @@ export async function getLoyaltyMetrics(startDate, endDate) {
   return api(`/admin/metrics/loyalty?start_date=${startDate}&end_date=${endDate}`);
 }
 
+export async function getRevenueAnalytics(startDate = null, endDate = null) {
+  const params = new URLSearchParams();
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
+  return api(`/admin/revenue/analytics${params.toString() ? `?${params.toString()}` : ""}`);
+}
+
+export async function getLoyaltyUsage(startDate = null, endDate = null) {
+  const params = new URLSearchParams();
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
+  return api(`/admin/loyalty/usage${params.toString() ? `?${params.toString()}` : ""}`);
+}
+
 export async function getRetentionMetrics(startDate, endDate) {
   return api(`/admin/metrics/retention?start_date=${startDate}&end_date=${endDate}`);
 }

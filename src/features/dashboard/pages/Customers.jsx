@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../shared/api/client.js";
 import { getSalonCustomers, getCustomerAppointments, updateAppointmentStatus, markAppointmentComplete, respondToReview } from "../../salon-reg/api.js";
+import { refreshSignedUrl } from "../../booking/api.js";
 import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
 import { Label } from "../../../shared/ui/label";
@@ -18,12 +19,13 @@ export default function Customers() {
   const [appointments, setAppointments] = useState([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointmentsPage, setAppointmentsPage] = useState(1);
-  const [appointmentsLimit] = useState(20);
+  const [appointmentsLimit] = useState(100);
   const [appointmentsTotal, setAppointmentsTotal] = useState(0);
   
   // Filtering state
   const [filterWhen, setFilterWhen] = useState("all"); // all, upcoming, past
   const [filterStatus, setFilterStatus] = useState(null); // null, completed, cancelled, no_show, scheduled, confirmed
+  const [sortOrder, setSortOrder] = useState("desc"); // desc = newest first, asc = oldest first (only for past)
   
   // Status change modal
   const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -69,7 +71,9 @@ export default function Customers() {
     try {
       const whenParam = when !== null ? when : filterWhen;
       const statusParam = status !== null ? status : filterStatus;
-      const appointmentsRes = await getCustomerAppointments(salonId, customerId, page, appointmentsLimit, whenParam, statusParam);
+      // For past appointments, use sort_order. For upcoming, always closest first (asc)
+      const sort = (whenParam === "past") ? sortOrder : "asc";
+      const appointmentsRes = await getCustomerAppointments(salonId, customerId, page, appointmentsLimit, whenParam, statusParam, sort);
       // Handle both array and object response formats
       let appointmentsList = [];
       if (Array.isArray(appointmentsRes)) {
@@ -77,12 +81,37 @@ export default function Customers() {
         setAppointmentsTotal(appointmentsList.length);
       } else if (appointmentsRes.appointments) {
         appointmentsList = appointmentsRes.appointments;
-        setAppointmentsTotal(appointmentsRes.count || appointmentsList.length);
+        setAppointmentsTotal(appointmentsRes.total_count || appointmentsRes.count || appointmentsList.length);
       } else {
         appointmentsList = [];
         setAppointmentsTotal(0);
       }
-      setAppointments(appointmentsList);
+      // Refresh signed URLs for review images if needed
+      const appointmentsWithRefreshedImages = await Promise.all(
+        appointmentsList.map(async (apt) => {
+          if (apt.review && apt.review.images && apt.review.images.length > 0) {
+            const refreshedImages = await Promise.all(
+              apt.review.images.map(async (img) => {
+                if (img.signed_url) return img;
+                if (img.file_url) {
+                  try {
+                    const result = await refreshSignedUrl(img.file_url, "review-images");
+                    return { ...img, signed_url: result.signed_url };
+                  } catch (err) {
+                    console.error(`Failed to refresh signed URL for ${img.file_url}:`, err);
+                    return img;
+                  }
+                }
+                return img;
+              })
+            );
+            return { ...apt, review: { ...apt.review, images: refreshedImages } };
+          }
+          return apt;
+        })
+      );
+      
+      setAppointments(appointmentsWithRefreshedImages);
     } catch (err) {
       console.error("Error loading appointments:", err);
       setAppointments([]);
@@ -306,6 +335,16 @@ export default function Customers() {
                         </>
                       )}
                     </select>
+                    {filterWhen === "past" && (
+                      <select
+                        value={sortOrder}
+                        onChange={(e) => { setSortOrder(e.target.value); handleFilterChange(filterWhen, filterStatus); }}
+                        className="text-sm border rounded px-2 py-1"
+                      >
+                        <option value="desc">Newest First</option>
+                        <option value="asc">Oldest First</option>
+                      </select>
+                    )}
                   </div>
                 </div>
                 {loadingAppointments ? (
@@ -340,11 +379,27 @@ export default function Customers() {
                                 </Button>
                               </div>
                             </div>
-                            <div className="text-sm text-gray-600 space-y-1">
+                              <div className="text-sm text-gray-600 space-y-1">
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4" />
                                 {formatDate(apt.start_at)}
                               </div>
+                              {apt.status === "completed" && apt.payment_status === "completed" && (
+                                <div className="flex items-center gap-2 text-indigo-600">
+                                  <Star className="h-4 w-4" />
+                                  <span className="font-medium">
+                                    {apt.loyalty_points_earned > 0 
+                                      ? `+${apt.loyalty_points_earned} loyalty points earned`
+                                      : "Points awarded on completion"}
+                                  </span>
+                                </div>
+                              )}
+                              {(apt.status === "scheduled" || apt.status === "confirmed") && apt.payment_status === "completed" && apt.loyalty_points_pending > 0 && (
+                                <div className="flex items-center gap-2 text-amber-600">
+                                  <Star className="h-4 w-4" />
+                                  <span className="font-medium">{apt.loyalty_points_pending} loyalty points pending</span>
+                                </div>
+                              )}
                               {barberName !== "N/A" && (
                                 <div className="flex items-center gap-2">
                                   <Clock className="h-4 w-4" />
@@ -387,7 +442,9 @@ export default function Customers() {
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
                                     <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                                    <span className="font-medium text-sm">Customer Review</span>
+                                    <span className="font-medium text-sm">
+                                      Review by {selectedCustomer ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}` : "Customer"}
+                                    </span>
                                     <span className="text-yellow-500">
                                       {"★".repeat(review.stars || review.rating)}
                                       <span className="text-gray-300">{"★".repeat(5 - (review.stars || review.rating))}</span>
@@ -395,6 +452,62 @@ export default function Customers() {
                                   </div>
                                 </div>
                                 <p className="text-sm text-gray-700 mb-2">{review.text || review.comment || "No written feedback."}</p>
+                                
+                                {/* Review Images */}
+                                {review.images && review.images.length > 0 && (
+                                  <div className="mt-3 flex flex-col md:flex-row gap-4">
+                                    {(() => {
+                                      const beforeImages = review.images.filter(
+                                        (img) => img.label === "before" || img.type === "before"
+                                      );
+                                      const afterImages = review.images.filter(
+                                        (img) => img.label === "after" || img.type === "after"
+                                      );
+                                      return (
+                                        <>
+                                          {beforeImages.length > 0 && (
+                                            <div className="flex-1">
+                                              <h4 className="text-xs font-medium text-gray-600 mb-2">Before</h4>
+                                              <div className="flex gap-2 flex-wrap">
+                                                {beforeImages.map((img) => (
+                                                  <img
+                                                    key={img.id || img.url || img.signed_url}
+                                                    src={img.url || img.signed_url}
+                                                    alt="Before"
+                                                    className="h-32 w-32 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition"
+                                                    onClick={() => {
+                                                      const url = img.url || img.signed_url;
+                                                      if (url) window.open(url, "_blank");
+                                                    }}
+                                                  />
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                          {afterImages.length > 0 && (
+                                            <div className="flex-1">
+                                              <h4 className="text-xs font-medium text-gray-600 mb-2">After</h4>
+                                              <div className="flex gap-2 flex-wrap">
+                                                {afterImages.map((img) => (
+                                                  <img
+                                                    key={img.id || img.url || img.signed_url}
+                                                    src={img.url || img.signed_url}
+                                                    alt="After"
+                                                    className="h-32 w-32 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition"
+                                                    onClick={() => {
+                                                      const url = img.url || img.signed_url;
+                                                      if (url) window.open(url, "_blank");
+                                                    }}
+                                                  />
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+                                )}
                                 {review.response && (
                                   <div className="mt-2 p-2 bg-indigo-50 rounded border-l-4 border-indigo-500">
                                     <div className="text-xs font-medium text-indigo-900 mb-1">Owner Response:</div>

@@ -30,3 +30,20 @@ export async function getAvailableServices() {
   const res = await api("/services?unique=name");
   return res.services ?? [];
 }
+
+/**
+ * Upload a profile image file
+ * @param {File} file - Image file to upload
+ * @returns {Promise<Object>} Upload result with url and filepath
+ */
+export async function uploadProfileImage(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  
+  const res = await api("/uploads/profile", {
+    method: "POST",
+    body: formData,
+  });
+  
+  return res;
+}

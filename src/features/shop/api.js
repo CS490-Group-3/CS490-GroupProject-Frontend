@@ -189,3 +189,85 @@ export async function createPromotion(salonId, promotionData) {
     body: promotionData, // api() will stringify it
   });
 }
+
+/**
+ * Order/Cart API functions
+ */
+
+/**
+ * Get the user's cart for a salon
+ * @param {string} salonId - Salon ID
+ * @returns {Promise<{cart: Object}>}
+ */
+export async function getCart(salonId) {
+  return api(`/orders/cart?salon_id=${salonId}`);
+}
+
+/**
+ * Add an item to the cart
+ * @param {string} salonId - Salon ID
+ * @param {string} productId - Product ID
+ * @param {number} quantity - Quantity to add
+ * @returns {Promise<{item: Object, message: string}>}
+ */
+export async function addToCart(salonId, productId, quantity = 1) {
+  return api("/orders/cart/items", {
+    method: "POST",
+    body: {
+      salon_id: salonId,
+      product_id: productId,
+      quantity
+    }
+  });
+}
+
+/**
+ * Update cart item quantity
+ * @param {string} itemId - Order item ID
+ * @param {string} orderId - Order ID
+ * @param {number} quantity - New quantity
+ * @returns {Promise<{item: Object, message: string}>}
+ */
+export async function updateCartItem(itemId, orderId, quantity) {
+  return api(`/orders/cart/items/${itemId}`, {
+    method: "PATCH",
+    body: {
+      order_id: orderId,
+      quantity
+    }
+  });
+}
+
+/**
+ * Remove an item from the cart
+ * @param {string} itemId - Order item ID
+ * @param {string} orderId - Order ID
+ * @returns {Promise<{message: string}>}
+ */
+export async function removeFromCart(itemId, orderId) {
+  return api(`/orders/cart/items/${itemId}?order_id=${orderId}`, {
+    method: "DELETE"
+  });
+}
+
+/**
+ * Checkout and process payment
+ * @param {Object} checkoutData - Checkout data
+ * @returns {Promise<{order: Object, payment: Object, message: string}>}
+ */
+export async function checkout(checkoutData) {
+  return api("/orders/checkout", {
+    method: "POST",
+    body: checkoutData
+  });
+}
+
+/**
+ * Get active promotions for a salon
+ * @param {string} salonId - Salon ID
+ * @param {number} purchaseAmount - Purchase amount to filter by min_purchase_amount
+ * @returns {Promise<{promotions: Array}>}
+ */
+export async function getActivePromotions(salonId, purchaseAmount = 0) {
+  return api(`/salons/${salonId}/promotions/active?purchase_amount=${purchaseAmount}`);
+}

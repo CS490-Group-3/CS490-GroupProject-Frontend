@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
+import PostAppointmentReview from "./PostAppointmentReview.jsx";
 
 export default function AppointmentCard({
   appt,
@@ -8,6 +9,7 @@ export default function AppointmentCard({
   compact = false,
   onSaveNote,
   children,
+  onReviewSubmitted,
 }) {
   const start = new Date(appt.start_at || appt.whenISO);
   const salon = appt.salon || {};
@@ -85,6 +87,30 @@ export default function AppointmentCard({
                    appt.payment_status === "pending" ? "Pending" : 
                    appt.payment_status === "failed" ? "Failed" : 
                    appt.payment_status}
+                </span>
+              } 
+            />
+          )}
+          {appt.status === "completed" && appt.payment_status === "completed" && (
+            <Row 
+              label="Loyalty:" 
+              value={
+                appt.loyalty_points_earned > 0 ? (
+                  <span className="text-indigo-600 font-medium">
+                    +{appt.loyalty_points_earned} points earned
+                  </span>
+                ) : (
+                  <span className="text-gray-500 text-xs">Points awarded on completion</span>
+                )
+              } 
+            />
+          )}
+          {(appt.status === "scheduled" || appt.status === "confirmed") && appt.payment_status === "completed" && appt.loyalty_points_pending > 0 && (
+            <Row 
+              label="Loyalty:" 
+              value={
+                <span className="text-amber-600 font-medium">
+                  {appt.loyalty_points_pending} points pending
                 </span>
               } 
             />
@@ -181,95 +207,41 @@ export default function AppointmentCard({
         </div>
       )}
 
-      {/* REVIEW DISPLAY */}
+      {/* REVIEW DISPLAY - Use PostAppointmentReview component which handles editing */}
       {appt.review && (
-        <div className="mt-5 rounded-xl border bg-gray-50 p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-900">Your Review</span>
-            <div className="flex">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <span
-                  key={star}
-                  className={`text-sm ${
-                    star <= (appt.review.stars || appt.review.rating || 0)
-                      ? "text-amber-500"
-                      : "text-gray-300"
-                  }`}
-                >
-                  ★
-                </span>
-              ))}
-            </div>
-          </div>
-          {appt.review.text || appt.review.comment ? (
-            <p className="text-sm text-gray-700">{appt.review.text || appt.review.comment}</p>
-          ) : null}
-          
-          {/* Review Images */}
-          {appt.review.images && appt.review.images.length > 0 && (
-            <div className="flex flex-col md:flex-row gap-4">
-              {(() => {
-                const beforeImages = appt.review.images.filter(
-                  (img) => img.label === "before" || img.type === "before"
-                );
-                const afterImages = appt.review.images.filter(
-                  (img) => img.label === "after" || img.type === "after"
-                );
-                return (
-                  <>
-                    {beforeImages.length > 0 && (
-                      <div className="flex-1">
-                        <h4 className="text-xs font-medium text-gray-600 mb-2">Before</h4>
-                        <div className="flex gap-2 flex-wrap">
-                          {beforeImages.map((img) => (
-                            <img
-                              key={img.id || img.url || img.signed_url}
-                              src={img.url || img.signed_url}
-                              alt="Before"
-                              className="h-48 w-48 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition"
-                              onClick={() => {
-                                const url = img.url || img.signed_url;
-                                if (url) window.open(url, "_blank");
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {afterImages.length > 0 && (
-                      <div className="flex-1">
-                        <h4 className="text-xs font-medium text-gray-600 mb-2">After</h4>
-                        <div className="flex gap-2 flex-wrap">
-                          {afterImages.map((img) => (
-                            <img
-                              key={img.id || img.url || img.signed_url}
-                              src={img.url || img.signed_url}
-                              alt="After"
-                              className="h-48 w-48 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition"
-                              onClick={() => {
-                                const url = img.url || img.signed_url;
-                                if (url) window.open(url, "_blank");
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          )}
-          
-          {/* Owner Response */}
-          {appt.review.response && (
-            <div className="mt-3 p-3 bg-indigo-50 rounded-lg border-l-4 border-indigo-500">
-              <div className="text-sm font-medium text-indigo-900 mb-1">Salon Owner Response:</div>
-              <div className="text-sm text-indigo-800">
-                {appt.review.response.response_text || appt.review.response.text}
-              </div>
-            </div>
-          )}
+        <div className="mt-5">
+          <PostAppointmentReview
+            appointmentId={appt.id}
+            existingReview={appt.review}
+            salonName={appt.salon?.name || "Salon"}
+            employeeName={appt.barber?.name || appt.employee?.name || "Barber"}
+            onSubmit={async (reviewId, payload, existingReviewId) => {
+              // Handle review update
+              const { updateReview, uploadReviewImages } = await import("../api.js");
+              try {
+                const reviewIdToUse = existingReviewId || reviewId;
+                await updateReview(reviewIdToUse, payload);
+                
+                // If there are new images, upload them
+                if (payload.beforeImages && payload.beforeImages.length > 0) {
+                  const beforeLabels = payload.beforeImages.map(() => "before");
+                  await uploadReviewImages(reviewIdToUse, payload.beforeImages, beforeLabels);
+                }
+                if (payload.afterImages && payload.afterImages.length > 0) {
+                  const afterLabels = payload.afterImages.map(() => "after");
+                  await uploadReviewImages(reviewIdToUse, payload.afterImages, afterLabels);
+                }
+                
+                // Reload the appointment to show updated review
+                if (typeof onReviewSubmitted === 'function') {
+                  onReviewSubmitted();
+                }
+              } catch (err) {
+                console.error("Failed to update review:", err);
+              }
+            }}
+            onReviewSubmitted={onReviewSubmitted}
+          />
         </div>
       )}
 

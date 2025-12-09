@@ -12,6 +12,7 @@ export async function getCustomerPoints() {
       balance: salon.balance || 0,
       lifetime_points_earned: salon.lifetime_points_earned || 0,
       lifetime_points_redeemed: salon.lifetime_points_redeemed || 0,
+      pending_points: salon.pending_points || 0,
       activity: salon.activity || []
     }));
   } catch (error) {
@@ -34,6 +35,34 @@ export async function getLoyaltyRewards(salonId = null) {
   } catch (error) {
     console.error("Failed to fetch loyalty rewards:", error);
     throw error;
+  }
+}
+
+// Get active promotional offers for a salon (customer-facing, only shows eligible promotions)
+export async function getActivePromotions(salonId, purchaseAmount = 0) {
+  if (!salonId) {
+    return [];
+  }
+  try {
+    const response = await api(`/salons/${salonId}/promotions/active?purchase_amount=${purchaseAmount}`);
+    return response.promotions || [];
+  } catch (error) {
+    console.error("Failed to fetch active promotions:", error);
+    return [];
+  }
+}
+
+// Calculate potential loyalty points for an amount
+export async function getPotentialPoints(salonId, amount) {
+  if (!salonId || amount == null) {
+    return 0;
+  }
+  try {
+    const response = await api(`/loyalty/potential-points?salon_id=${salonId}&amount=${amount}`);
+    return response.points || 0;
+  } catch (error) {
+    console.error("Failed to calculate potential points:", error);
+    return 0;
   }
 }
 

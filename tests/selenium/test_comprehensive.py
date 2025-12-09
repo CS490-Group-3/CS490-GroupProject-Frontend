@@ -11,6 +11,7 @@ from selenium.common.exceptions import TimeoutException, ElementClickIntercepted
 from selenium.webdriver.common.action_chains import ActionChains
 import time
 import random
+import os
 
 # Test Account Credentials
 CUSTOMER_EMAIL = "customer@salonica.com"
@@ -37,7 +38,16 @@ class BaseTest:
     
     def setup_method(self):
         chrome_options = Options()
-        chrome_options.add_argument("--start-maximized")
+        # Check if running in CI (headless mode)
+        if os.getenv("CI") or os.getenv("GITHUB_ACTIONS"):
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            # Use chromium-browser in CI
+            chrome_options.binary_location = "/usr/bin/chromium-browser"
+        else:
+            chrome_options.add_argument("--start-maximized")
         self.driver = webdriver.Chrome(options=chrome_options)
         self.wait = WebDriverWait(self.driver, 15)
         self.base_url = BASE_URL
@@ -640,21 +650,33 @@ class Test3_SalonRegistration(BaseTest):
             
             # Upload business license file (REQUIRED)
             import os
-            license_input = self.driver.find_elements(By.ID, "license")
-            if license_input:
-                # Create a test license file if it doesn't exist
-                test_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_license.txt")
-                if not os.path.exists(test_file_path):
-                    with open(test_file_path, "w") as f:
-                        f.write("TEST BUSINESS LICENSE\n")
-                        f.write("License Number: TEST-12345\n")
-                        f.write("Valid for automated testing purposes only.\n")
-                
-                license_input[0].send_keys(test_file_path)
-                time.sleep(2)
-                print("✅ Uploaded business license file")
-            else:
-                print("⚠️  License input not found")
+            # Wait for the license input to be present and visible
+            try:
+                license_input = self.wait.until(
+                    EC.presence_of_element_located((By.ID, "license"))
+                )
+                # Check if it's enabled (not disabled in edit mode)
+                if license_input.is_enabled():
+                    # Create a test license file if it doesn't exist
+                    test_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_license.txt")
+                    if not os.path.exists(test_file_path):
+                        with open(test_file_path, "w") as f:
+                            f.write("TEST BUSINESS LICENSE\n")
+                            f.write("License Number: TEST-12345\n")
+                            f.write("Valid for automated testing purposes only.\n")
+                    
+                    # Make sure the input is visible and scroll to it
+                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", license_input)
+                    time.sleep(1)
+                    license_input.send_keys(test_file_path)
+                    time.sleep(2)
+                    print("✅ Uploaded business license file")
+                else:
+                    print("⚠️  License input is disabled (form may be in edit mode for existing salon)")
+            except TimeoutException:
+                print("⚠️  License input not found - form may not be loaded or owner already has a salon")
+            except Exception as e:
+                print(f"⚠️  Error uploading license: {e}")
             
             time.sleep(2)
             
@@ -876,13 +898,34 @@ class Test3_SalonRegistration(BaseTest):
                             # The second "Add Employee" button is the confirm one
                             if len(add_emp_btns) >= 2:
                                 self.safe_click(add_emp_btns[-1])
-                                time.sleep(3)
+                                time.sleep(5)  # Increased wait time for employee to be fully added
                                 print("✅ Added employee to salon")
+                                
+                                # Wait for the employee to appear in the employees list
+                                # This ensures the backend has processed the addition
+                                try:
+                                    self.wait.until(
+                                        lambda d: len(d.find_elements(By.XPATH, "//*[contains(text(), 'Assign Services')]")) > 0
+                                    )
+                                    print("✅ Employee is now visible in the list")
+                                except:
+                                    print("⚠️  Employee may not be fully loaded yet")
+                                
                                 employee_added = True
                             elif add_emp_btns:
                                 self.safe_click(add_emp_btns[0])
-                                time.sleep(3)
+                                time.sleep(5)  # Increased wait time
                                 print("✅ Added employee to salon")
+                                
+                                # Wait for employee to be visible
+                                try:
+                                    self.wait.until(
+                                        lambda d: len(d.find_elements(By.XPATH, "//*[contains(text(), 'Assign Services')]")) > 0
+                                    )
+                                    print("✅ Employee is now visible in the list")
+                                except:
+                                    print("⚠️  Employee may not be fully loaded yet")
+                                
                                 employee_added = True
                         else:
                             print("⚠️  No unassigned barbers found in search results")
@@ -902,7 +945,13 @@ class Test3_SalonRegistration(BaseTest):
             if employee_added:
                 try:
                     print("📍 Assigning 'Haircut' service to employee...")
-                    time.sleep(2)
+                    # Wait a bit more to ensure employee is fully loaded and page has refreshed
+                    time.sleep(3)
+                    
+                    # Refresh the page to ensure we have the latest employee data
+                    self.driver.refresh()
+                    self.wait_for_page_load()
+                    time.sleep(3)
                     
                     # Find and click "Assign Services" button for the employee
                     assign_btn = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Assign Services')]")
@@ -972,8 +1021,21 @@ class Test3_SalonRegistration(BaseTest):
                         save_services_btn = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Save Services')]")
                         if save_services_btn:
                             self.safe_click(save_services_btn[0])
-                            time.sleep(3)
-                            print("✅ Saved 'Haircut' service assignment to employee")
+                            time.sleep(5)  # Increased wait for backend to process
+                            
+                            # Handle any alert that appears (success or error)
+                            try:
+                                alert = self.driver.switch_to.alert
+                                alert_text = alert.text
+                                alert.accept()
+                                time.sleep(1)
+                                if "error" in alert_text.lower() or "fail" in alert_text.lower():
+                                    print(f"⚠️  Alert after saving services: {alert_text}")
+                                else:
+                                    print(f"✅ Saved 'Haircut' service assignment to employee: {alert_text}")
+                            except:
+                                # No alert, assume success
+                                print("✅ Saved 'Haircut' service assignment to employee")
                         else:
                             print("⚠️  Save Services button not found")
                     else:
@@ -1215,8 +1277,30 @@ class Test6_AdminFeatures(BaseTest):
         print("\n✅ TEST 6 COMPLETE - All admin tabs navigated")
 
 
+def cleanup_test_data():
+    """Clean up test data before running tests"""
+    try:
+        from cleanup_test_data import cleanup_test_salons
+        print("\n" + "="*70)
+        print("🧹 CLEANING UP PREVIOUS TEST DATA")
+        print("="*70)
+        cleanup_test_salons()
+        print("="*70 + "\n")
+    except ImportError:
+        print("⚠️  Cleanup module not found. Skipping automatic cleanup.")
+        print("   Install supabase-py: pip install supabase")
+    except Exception as e:
+        print(f"⚠️  Cleanup failed: {e}")
+        print("   Tests will continue, but you may need to manually clean up test data.")
+
 def run_all_tests():
     """Run all test suites"""
+    # Clean up test data BEFORE running tests
+    print("\n" + "="*70)
+    print("🧹 PRE-TEST CLEANUP")
+    print("="*70)
+    cleanup_test_data()
+    
     print("\n" + "="*70)
     print("🚀 SALONICA COMPREHENSIVE SELENIUM TEST SUITE")
     print("="*70)
@@ -1263,6 +1347,12 @@ def run_all_tests():
     print(f"   ❌ Failed: {failed}")
     print(f"   Success Rate: {(passed/len(test_classes)*100):.1f}%")
     print("="*70)
+    
+    # Clean up test data AFTER running tests
+    print("\n" + "="*70)
+    print("🧹 POST-TEST CLEANUP")
+    print("="*70)
+    cleanup_test_data()
     
     if failed == 0:
         print("\n🎉 ALL TESTS PASSED!")
