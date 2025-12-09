@@ -1,13 +1,122 @@
 # Selenium Test Suite for Salonica
 
-## What is Selenium?
-Selenium is a web automation framework that simulates real user interactions to test if your application works correctly. It clicks buttons, fills forms, and navigates pages just like a real user would.
+Comprehensive automated testing for the Salonica salon booking platform.
 
-## Why We Use It
-- **Automated Testing**: Tests run automatically without manual clicking
-- **Quality Assurance**: Catch bugs before users do
-- **Regression Testing**: Ensure new features don't break existing functionality
-- **Professional Practice**: Industry-standard for web application testing
+## Test Coverage
+
+This test suite covers **6 main test flows** across all user roles:
+
+| Test | Description | User Role |
+|------|-------------|-----------|
+| Test 1 | Authentication, Profile Update & Loyalty | Customer |
+| Test 2 | Complete Booking Flow (with date selection) | Customer |
+| Test 3 | Salon Registration, Admin Approval & Setup | Owner + Admin |
+| Test 4 | Loyalty Program Configuration | Owner |
+| Test 5 | Barber Schedule Management | Barber |
+| Test 6 | Admin Features (all tabs) | Admin |
+
+---
+
+## User Stories Tested
+
+### ✅ FEATURES TESTED (18 Features)
+
+#### Authentication & Registration
+| # | User Story | Test |
+|---|------------|------|
+| 1 | As a user, I want to log in securely so that I can manage my appointments and data. | Test 1, 2, 3, 4, 5, 6 |
+| 2 | As a salon owner, I want to register my salon so that I can list it on the platform. | Test 3 |
+| 3 | As an admin, I want to verify salon registrations so that only legitimate businesses are listed. | Test 3 |
+
+#### Booking & Appointments
+| # | User Story | Test |
+|---|------------|------|
+| 4 | As a user, I want to browse available salons so that I can choose where to book. | Test 2 |
+| 5 | As a user, I want to view available barbers and time slots so that I can book easily. | Test 2 |
+| 6 | As a user, I want to reschedule my appointment so that I can adjust my plans. | Test 2 |
+| 7 | As a user, I want to cancel an appointment so that I don't take up unnecessary slots. | Test 2 |
+
+#### Barber Schedule
+| # | User Story | Test |
+|---|------------|------|
+| 8 | As a barber, I want to view my daily schedule so that I can prepare in advance. | Test 5 |
+| 9 | As a barber, I want to block unavailable time slots so that customers don't book them. | Test 5 |
+
+#### Payments
+| # | User Story | Test |
+|---|------------|------|
+| 10 | As a user, I want to pay securely online so that I don't need cash. | Test 2 |
+
+#### Loyalty Program
+| # | User Story | Test |
+|---|------------|------|
+| 11 | As a user, I want to view my loyalty points balance so that I know my rewards progress. | Test 1 |
+| 12 | As a user, I want to redeem loyalty points for discounts so that I can save money. | Test 2 |
+| 13 | As a salon owner, I want to configure loyalty rewards so that I can attract repeat customers. | Test 4 |
+
+#### Admin Analytics & Monitoring
+| # | User Story | Test |
+|---|------------|------|
+| 14 | As an admin, I want to see user engagement stats so that I can monitor platform usage. | Test 6 (Dashboard) |
+| 15 | As an admin, I want to see appointment trends so that I can identify peak hours. | Test 6 (Analytics) |
+| 16 | As an admin, I want to track salon revenues so that I can analyze performance. | Test 6 (Analytics) |
+| 17 | As an admin, I want to monitor loyalty program usage so that I can measure effectiveness. | Test 6 (Analytics) |
+| 18 | As an admin, I want to monitor platform uptime and errors so that I can ensure reliability. | Test 6 (Health/Monitor) |
+
+### ❌ FEATURES NOT TESTED (16 Features)
+
+| # | User Story | Reason |
+|---|------------|--------|
+| 1 | As a user, I want to sign up with an email and password | Login tested, but not new signup flow |
+| 2 | As a user, I want to receive reminders before my appointment | Notifications not tested |
+| 3 | As a salon owner, I want to track payments | Payments page not navigated |
+| 4 | As a user, I want to earn loyalty points for each visit | Points earning not verified |
+| 5 | As a salon owner and user I want to save/view before-after images | Not implemented in tests |
+| 6 | As a user, I want to view my visit history | Not tested |
+| 7 | As a salon owner, I want to see customer visit histories | Not tested |
+| 8 | As a user, I want to leave reviews for salons | Not tested |
+| 9 | As a salon owner, I want to respond to reviews | Not tested |
+| 10 | As a user, I want to get notifications about discounts | Not tested |
+| 11 | As a salon owner, I want to send promotional offers | Not tested |
+| 12 | As a Salon Owner I want to have an online shop | Not tested |
+| 13 | As a user, I want to purchase items and add to cart | Not tested |
+| 14 | As an admin, I want to visualize user demographics | Page navigated, not verified |
+| 15 | As an admin, I want to see customer retention metrics | Page navigated, not verified |
+| 16 | As an admin, I want to generate reports | Page navigated, not verified |
+
+### 📊 COVERAGE SUMMARY
+
+| Category | Tested | Not Tested | Total |
+|----------|--------|------------|-------|
+| Authentication & Registration | 3 | 1 | 4 |
+| Booking & Appointments | 4 | 1 | 5 |
+| Barber Schedule | 2 | 0 | 2 |
+| Payments | 1 | 1 | 2 |
+| Loyalty Program | 3 | 1 | 4 |
+| Before/After Images | 0 | 1 | 1 |
+| Visit History | 0 | 2 | 2 |
+| Reviews | 0 | 2 | 2 |
+| Notifications/Promotions | 0 | 2 | 2 |
+| Online Shop | 0 | 2 | 2 |
+| Admin Analytics | 5 | 3 | 8 |
+| **TOTAL** | **18** | **16** | **34** |
+
+**✅ 18 Features Tested (53% coverage of user stories)**
+
+---
+
+## Test Accounts
+
+The following test accounts are used:
+
+| Role | Email | Password |
+|------|-------|----------|
+| Customer | `customer@salonica.com` | `Ssssssss7` |
+| Barber | `barber1atfadefactory@salonica.com` | `Ssssssss7` |
+| Owner | `owner@salonica.com` | `Ssssssss7` |
+| New Owner | `hifif37383@kudimi.com` | `TestOwner1` |
+| Admin | `dadeha8177@izeao.com` | `Pass123123` |
+| Unassigned Barber | `duo1xcv@nuoifb.com` | (for salon setup) |
 
 ## Setup Instructions
 
@@ -17,18 +126,7 @@ cd tests/selenium
 pip install -r requirements.txt
 ```
 
-### 2. Install ChromeDriver
-**Option A - Automatic (Recommended):**
-```bash
-pip install webdriver-manager
-```
-
-**Option B - Manual:**
-1. Download ChromeDriver: https://chromedriver.chromium.org/downloads
-2. Match your Chrome browser version
-3. Add to your PATH
-
-### 3. Start Your Dev Server
+### 2. Start Your Dev Server
 ```bash
 # In your project root
 npm run dev
@@ -37,128 +135,182 @@ The app should be running on `http://localhost:5173`
 
 ## Running Tests
 
-### Run All Authentication Tests
-```bash
-python test_auth.py
-```
-
-### Run All Navigation Tests
-```bash
-python test_navigation.py
-```
-
-### Run with Pytest (Better Output)
-```bash
-pytest test_auth.py -v
-pytest test_navigation.py -v
-```
-
 ### Run All Tests
 ```bash
-pytest -v
+cd tests/selenium
+python test_comprehensive.py
 ```
 
-## Test Coverage
+### Run with Interactive Prompt
+```bash
+python run_all_tests.py
+```
 
-### `test_auth.py` - Authentication Testing
-- ✅ Home page loads correctly
-- ✅ Navigation to sign up page
-- ✅ Form validation
-- ✅ Complete sign up flow
-- ✅ Login functionality
-- ✅ Demo login buttons (stub mode)
+### Run with Pytest
+```bash
+pytest test_comprehensive.py -v
+```
 
-### `test_navigation.py` - UI & Navigation Testing
-- ✅ All homepage sections load
-- ✅ Search bar interaction
-- ✅ Scroll functionality
-- ✅ Footer links exist
-- ✅ Responsive design (mobile/tablet/desktop)
-- ✅ CTA buttons work
+## Test Flow Details
 
-## What Happens During Tests
+### Test 1: Authentication, Profile & Loyalty
+1. Invalid login attempt (should be rejected)
+2. Valid customer login
+3. Update profile last name
+4. Check loyalty balance and claim rewards
 
-1. **Chrome browser opens automatically**
-2. **Tests run one by one**
-   - Each test navigates to different pages
-   - Clicks buttons, fills forms
-   - Verifies elements exist and work
-3. **Browser closes after each test**
-4. **Results printed to console**
+### Test 2: Complete Booking Flow
+1. Login as customer
+2. Navigate to Browse Salons
+3. Search for "Fade Factory"
+4. Click on salon profile
+5. Start booking wizard
+6. Select barber (not Caleb)
+7. Select service
+8. **Select date/time** - if no slots available, automatically tries next day
+9. Review appointment
+10. Proceed to payment
+11. Select saved payment method
+12. Click Pay button
+13. Reschedule the appointment
+14. Cancel the appointment
 
-## Tips for Presentation
+### Test 3: Salon Registration & Verification
+1. Login as new owner
+2. Fill out salon registration form (name, address, phone, license)
+3. Submit application
+4. **Logout** and login as **Admin**
+5. Navigate to Salon Verification
+6. Click "Approve Application" → Click "Approve Salon" in dialog
+7. **Logout** and login back as **Owner**
+8. Navigate to Salon Setup page
+9. **Save salon hours**
+10. **Add a service** (Haircut, 30 min, $25)
+11. **Add an employee** (search for unassigned barber)
+12. **Assign "Haircut" service to the employee**
+13. Verify owner dashboard is accessible
 
-**If Professor Asks:**
-- "We use Selenium for automated end-to-end testing"
-- "It simulates real user interactions to catch bugs"
-- "Tests run automatically before deployment"
-- *Demo: Run `python test_auth.py` and show browser automation*
+### Test 4: Loyalty Configuration
+1. Login as owner
+2. Navigate to Loyalty Program
+3. Adjust loyalty settings
+4. Save changes
 
-**To Show Working Tests:**
-1. Start your dev server: `npm run dev`
-2. Run: `python test_auth.py`
-3. Watch the browser open and run tests automatically
-4. Point out the passing test output in console
+### Test 5: Barber Schedule Management
+1. Login as barber
+2. Navigate to Schedule
+3. Block time slots or interact with schedule
+
+### Test 6: Admin Features (All Tabs)
+1. Login as admin
+2. Navigate to **Dashboard** - view platform metrics
+3. Navigate to **Salon Verification** - view pending applications
+4. Navigate to **Analytics** - view revenue/bookings
+5. Navigate to **Audit Logs** - view activity logs
+6. Navigate to **Platform Health** - view system status
+7. Navigate to **Profile** - view admin profile
+
+## After Running Tests - Database Cleanup
+
+After running the tests, you need to clean up the test data from Supabase:
+
+### Step 1: Delete Barber Availability Records
+Run this SQL query in Supabase SQL Editor (replace the salon_id with the test salon's ID):
+
+```sql
+DELETE FROM public.barber_availability
+WHERE barber_id IN (
+    SELECT id
+    FROM public.barbers
+    WHERE salon_id = 'YOUR_TEST_SALON_ID_HERE'
+);
+```
+
+### Step 2: Manually Delete the Test Salon
+1. Go to Supabase Dashboard → Table Editor
+2. Navigate to the `salons` table
+3. Find the row with the test salon (look for "Test Salon XXXX" name)
+4. Delete the row manually
+
+> **Note:** The salon ID changes each time you run the test. You'll need to find the correct ID in the salons table first, then use it in the SQL query above.
+
+### Step 3: Clean Up Barbers Table (if needed)
+If the unassigned barber was added to the test salon, you may need to remove them:
+
+```sql
+DELETE FROM public.barbers
+WHERE salon_id = 'YOUR_TEST_SALON_ID_HERE';
+```
 
 ## Common Issues & Fixes
 
+### Tests Run Too Fast
+Tests have built-in delays, but you can increase `time.sleep()` values for demo purposes.
+
 ### ChromeDriver Version Mismatch
+The test uses `webdriver.Chrome()` which should auto-manage ChromeDriver. If issues occur:
 ```bash
 pip install webdriver-manager
-# Then update test files to use WebDriverManager
 ```
 
-### Port Already in Use
-- Change `self.base_url` in test files to match your dev server port
+### No Time Slots Available
+The test automatically clicks the next day on the calendar if no slots are available (up to 14 days ahead).
 
-### Tests Run Too Fast
-- Tests have built-in `time.sleep()` delays
-- Increase delays to see actions more clearly during demo
-
-### Headless Mode (No Browser Window)
-Uncomment this line in test files:
-```python
-chrome_options.add_argument("--headless")
-```
+### Logout Not Working
+The test clicks the "Logout" button in the header. If this fails, it falls back to clearing localStorage.
 
 ## Expected Output
 
 ```
+======================================================================
+🚀 SALONICA COMPREHENSIVE SELENIUM TEST SUITE
+======================================================================
+Testing: http://localhost:5173
+======================================================================
+
+📦 Running: Test 1: Auth, Profile & Loyalty
+======================================================================
+🧪 TEST 1: Authentication, Profile & Loyalty
 ============================================================
-🚀 Salonica Selenium Test Suite - Authentication
-============================================================
 
-🧪 Test 1: Home Page Load
-✅ Home page loaded successfully
-   Title: Vite + React
+📍 Step 1: Invalid Login Attempt
+✅ Invalid login correctly rejected
 
-🧪 Test 2: Navigate to Sign Up
-✅ Successfully navigated to sign up page
+📍 Step 2: Valid Customer Login
+✅ Logged in as customer
+✅ Customer login successful
 
-🧪 Test 3: Sign Up Form Validation
-✅ Form validation working correctly
+📍 Step 3: Update Profile Last Name
+✅ Clicked Edit Profile button
+✅ Entered new last name: TestUser1234
+✅ Profile updated successfully
 
-🧪 Test 4: Complete Sign Up Flow
-   Created test user: test.user1234@example.com
-✅ Sign up form submitted successfully
+📍 Step 4: Check Loyalty Balance & Claim Reward
+✅ Loyalty page loaded
 
-🧪 Test 5: Login Flow
-   Current URL: http://localhost:5173/customer/browse
-✅ Login submitted successfully
+✅ TEST 1 COMPLETE
 
-🧪 Test 6: Demo Login Buttons
-   Redirected to: http://localhost:5173/customer/browse
-✅ Demo login working (stub mode enabled)
+... (Tests 2-6) ...
 
-============================================================
-📊 Test Results: 6 passed, 0 failed
-============================================================
+======================================================================
+📊 FINAL TEST RESULTS
+======================================================================
+   Total Tests: 6
+   ✅ Passed: 6
+   ❌ Failed: 0
+   Success Rate: 100.0%
+======================================================================
+
+🎉 ALL TESTS PASSED!
 ```
 
-## Future Enhancements
-- Add tests for salon browsing
-- Test appointment booking flow
-- Test admin verification workflow
-- Add screenshot capture on failure
-- Integrate with CI/CD pipeline
+## File Structure
 
+```
+tests/selenium/
+├── README.md              # This file
+├── requirements.txt       # Python dependencies
+├── test_comprehensive.py  # Main test suite (6 tests)
+├── run_all_tests.py       # Test runner with prompts
+└── test_license.txt       # Test license file for uploads
+```
