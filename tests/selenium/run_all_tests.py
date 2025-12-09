@@ -1,6 +1,6 @@
 """
 Run all Selenium tests for Salonica
-Quick demo script for presentation
+Comprehensive test suite covering 15+ features
 """
 import subprocess
 import sys
@@ -26,8 +26,8 @@ def main():
     ╔══════════════════════════════════════════════════════════╗
     ║       SALONICA SELENIUM TEST SUITE - FULL RUN           ║
     ║                                                          ║
-    ║  Automated testing for salon booking application        ║
-    ║  Tests: Authentication, Navigation, UI, Forms            ║
+    ║  Comprehensive automated testing for salon booking app   ║
+    ║  Tests: 15+ features across all user roles              ║
     ╚══════════════════════════════════════════════════════════╝
     """)
     
@@ -38,38 +38,22 @@ def main():
     
     input("\n📍 Press ENTER when ready to start tests...")
     
-    tests_passed = 0
-    tests_failed = 0
-    
-    # Run authentication tests
-    if run_command("python test_auth.py", "Authentication Tests"):
-        tests_passed += 1
-    else:
-        tests_failed += 1
-    
-    time.sleep(2)
-    
-    # Run navigation tests  
-    if run_command("python test_navigation.py", "Navigation & UI Tests"):
-        tests_passed += 1
-    else:
-        tests_failed += 1
+    # Run comprehensive test suite
+    success = run_command("python test_comprehensive.py", "Comprehensive Test Suite (15+ Features)")
     
     # Final summary
     print("\n" + "=" * 60)
-    print("📊 FINAL TEST SUMMARY")
+    print("📊 TEST EXECUTION COMPLETE")
     print("=" * 60)
-    print(f"   Test Suites Passed: {tests_passed}")
-    print(f"   Test Suites Failed: {tests_failed}")
     
-    if tests_failed == 0:
+    if success:
         print("\n🎉 ALL TESTS PASSED! Application is working correctly.")
     else:
         print("\n⚠️  Some tests failed. Check output above for details.")
     
     print("=" * 60)
     
-    return 0 if tests_failed == 0 else 1
+    return 0 if success else 1
 
 if __name__ == "__main__":
     sys.exit(main())
