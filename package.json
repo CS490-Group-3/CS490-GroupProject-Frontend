@@ -8,11 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "test:ui": "vitest --ui",
-    "test:e2e": "cd tests/selenium && python run_all_tests.py"
+    "test:e2e": "cd tests/selenium && python3 test_comprehensive.py"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
