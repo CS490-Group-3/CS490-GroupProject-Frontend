@@ -98,7 +98,24 @@ export async function api(path, opts = {}) {
         throw new Error(errorMessage);
       }
       
-      return res.json();
+      // Handle 204 No Content (empty response)
+      if (res.status === 204) {
+        return null;
+      }
+      
+      // Check if response has content before parsing JSON
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        return text ? JSON.parse(text) : null;
+      }
+      
+      const text = await res.text();
+      if (!text || text.trim() === '') {
+        return null;
+      }
+      
+      return JSON.parse(text);
     } catch (error) {
       // If it's a network error or server disconnected, retry
       if (attempt < maxRetries - 1 && (
