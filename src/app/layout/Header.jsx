@@ -1,21 +1,25 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../../features/auth/auth-provider.jsx";
 import { api } from "../../shared/api/client.js";
 import { checkSetupStatus } from "../../features/salon-reg/api.js";
 import NotificationDrawer from "../../features/notifications/components/NotificationDrawer.jsx";
 import salonicaLogo from "../../assets/salonica.png";
+import { ChevronDown } from "lucide-react";
 
 const linkClass = ({ isActive }) =>
-  `px-4 py-2.5 rounded-md font-semibold transition-colors duration-150 ${
+  `px-3 py-2 rounded-md text-base font-semibold transition-colors duration-150 whitespace-nowrap ${
     isActive ? "bg-indigo-100 text-indigo-700" : "text-gray-700 hover:bg-gray-100"
   }`;
 
 export default function Header() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [ownerHasVerifiedSalon, setOwnerHasVerifiedSalon] = useState(null);
   const [ownerSetupComplete, setOwnerSetupComplete] = useState(null);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef(null);
 
   const handleLogout = async () => {
     try {
@@ -85,6 +89,17 @@ export default function Header() {
     };
   }, [user?.role]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // Role-based navigation links
   const getNavLinks = () => {
     if (!user) return null;
@@ -104,6 +119,14 @@ export default function Header() {
       case "salon_owner":
         // If verified and setup complete, show full navigation
         if (ownerHasVerifiedSalon === true && ownerSetupComplete === true) {
+          const moreMenuItems = [
+            { to: "/revenue", label: "Revenue" },
+            { to: "/promotions", label: "Promotions" },
+            { to: "/loyalty-program", label: "Loyalty Program" },
+            { to: "/retail", label: "My Shop" },
+          ];
+          const isMoreActive = moreMenuItems.some(item => location.pathname === item.to);
+          
           return (
             <>
               <NavLink to="/salon-dashboard" className={linkClass}>Dashboard</NavLink>
@@ -111,10 +134,35 @@ export default function Header() {
               <NavLink to="/employees" className={linkClass}>Employees</NavLink>
               <NavLink to="/clients" className={linkClass}>Customers</NavLink>
               <NavLink to="/salon-orders" className={linkClass}>Orders</NavLink>
-              <NavLink to="/revenue" className={linkClass}>Revenue</NavLink>
-              <NavLink to="/promotions" className={linkClass}>Promotions</NavLink>
-              <NavLink to="/loyalty-program" className={linkClass}>Loyalty Program</NavLink>
-              <NavLink to="/retail" className={linkClass}>My Shop</NavLink>
+              <div className="relative" ref={moreMenuRef}>
+                <button
+                  onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                  className={`px-3 py-2 rounded-md text-base font-semibold transition-colors duration-150 whitespace-nowrap flex items-center gap-1 ${
+                    isMoreActive ? "bg-indigo-100 text-indigo-700" : "text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  More
+                  <ChevronDown className={`h-4 w-4 transition-transform ${moreMenuOpen ? "rotate-180" : ""}`} />
+                </button>
+                {moreMenuOpen && (
+                  <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
+                    {moreMenuItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setMoreMenuOpen(false)}
+                        className={({ isActive }) =>
+                          `block px-4 py-2 text-sm transition-colors ${
+                            isActive ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-700 hover:bg-gray-50"
+                          }`
+                        }
+                      >
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
               <NavLink to="/profile" className={linkClass}>Profile</NavLink>
             </>
           );
@@ -162,38 +210,38 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-10 bg-white border-b border-gray-200">
-      <div className="w-full px-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 py-3">
-          <div className="flex items-center gap-3 flex-shrink-0 w-full md:w-auto justify-center md:justify-start">
+      <div className="w-full px-3">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2.5 py-2.5">
+          <div className="flex items-center gap-2 flex-shrink-0 w-full md:w-auto justify-center md:justify-start">
             <NavLink to="/" className="flex items-center text-lg font-extrabold text-indigo-600 hover:text-indigo-700 flex-shrink-0">
-              <img src={salonicaLogo} alt="Salonica" className="h-8 md:h-10 w-auto object-contain max-w-[100px] md:max-w-[120px]" />
+              <img src={salonicaLogo} alt="Salonica" className="h-7 md:h-8 w-auto object-contain max-w-[90px] md:max-w-[100px]" />
             </NavLink>
-            <nav className="flex flex-wrap gap-2 justify-center md:justify-start">
+            <nav className="flex flex-wrap gap-1.5 justify-center md:justify-start">
               {getNavLinks()}
             </nav>
           </div>
           
-          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {user ? (
               <>
                 <NotificationDrawer />
-                <div className="flex items-center gap-2">
-                  <span className="text-xs md:text-sm text-gray-600 whitespace-nowrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-600 whitespace-nowrap hidden sm:inline">
                     Welcome, {displayName}
                   </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 whitespace-nowrap">
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 whitespace-nowrap">
                     {user.role}
                   </span>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="px-2 md:px-3 py-1.5 md:py-2 rounded-md font-semibold text-xs md:text-base text-gray-700 hover:bg-gray-100 transition-colors duration-150 whitespace-nowrap"
+                  className="px-2 py-1 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors duration-150 whitespace-nowrap"
                 >
                   Logout
                 </button>
               </>
             ) : (
-              <nav className="flex gap-2">
+              <nav className="flex gap-1">
                 <NavLink to="/auth/sign-in" className={linkClass}>Sign In</NavLink>
                 <NavLink to="/auth/sign-up" className={linkClass}>Sign Up</NavLink>
               </nav>

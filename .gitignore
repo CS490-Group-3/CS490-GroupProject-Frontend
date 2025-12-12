@@ -10,6 +10,13 @@ build/
 .vscode/
 .idea/
 
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
 # Backend repository (for analysis only, not to be committed)
 backendtemp/
 CS490-GroupProject-Backend-dev/
