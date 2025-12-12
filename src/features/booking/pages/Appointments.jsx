@@ -9,34 +9,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 
 export default function Appointments() {
-  const [tab, setTab] = useState("upcoming"); // upcoming | inprogress | past | cancelled
-  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("upcoming");
   const [err, setErr] = useState("");
   
-  // Separate state for each tab
+  // Appointment counts (loaded on initial mount)
+  const [upcomingCount, setUpcomingCount] = useState(0);
+  const [inprogressCount, setInprogressCount] = useState(0);
+  const [pastCount, setPastCount] = useState(0);
+  const [cancelledCount, setCancelledCount] = useState(0);
+  const [countsLoading, setCountsLoading] = useState(true);
+  
+  // Appointment lists (loaded when tab is clicked)
   const [upcomingAppts, setUpcomingAppts] = useState([]);
   const [inprogressAppts, setInprogressAppts] = useState([]);
   const [pastAppts, setPastAppts] = useState([]);
   const [cancelledAppts, setCancelledAppts] = useState([]);
   
   // Loading states
-  const [loadingUpcoming, setLoadingUpcoming] = useState(true);
-  const [loadingInprogress, setLoadingInprogress] = useState(true);
+  const [loadingUpcoming, setLoadingUpcoming] = useState(false);
+  const [loadingInprogress, setLoadingInprogress] = useState(false);
   const [loadingPast, setLoadingPast] = useState(false);
   const [loadingCancelled, setLoadingCancelled] = useState(false);
   
-  // Pagination for past/cancelled only
+  // Pagination/load more
   const [pastPage, setPastPage] = useState(1);
   const [cancelledPage, setCancelledPage] = useState(1);
-  const [pastTotal, setPastTotal] = useState(0);
-  const [cancelledTotal, setCancelledTotal] = useState(0);
-  const pastLimit = 10;
-  const cancelledLimit = 10;
+  const pastLimit = 20;
+  const cancelledLimit = 20;
+  const [hasMorePast, setHasMorePast] = useState(false);
+  const [hasMoreCancelled, setHasMoreCancelled] = useState(false);
   
   // Sort (only for past appointments)
-  const [sortOrder, setSortOrder] = useState("desc"); // desc = newest first, asc = oldest first
+  const [sortOrder, setSortOrder] = useState("desc");
 
-  // modal targets
+  // Modal targets
   const [resAppt, setResAppt] = useState(null);
   const [cancelAppt, setCancelAppt] = useState(null);
 
@@ -55,40 +61,56 @@ export default function Appointments() {
     return start <= now && now < end && !isCancelled(a);
   };
 
-  // Load upcoming appointments (always load these)
-  const loadUpcoming = useCallback(async () => {
+  // Load counts for all categories on initial mount
+  const loadCounts = useCallback(async () => {
     try {
-      setLoadingUpcoming(true);
-      const res = await listUserAppointments({
-        when: "upcoming",
-        page: 1,
-        limit: 100,
-        sort: "asc"
-      });
+      setCountsLoading(true);
       
-      if (res && res.appointments) {
-        // Filter out cancelled and in-progress from upcoming
-        const filtered = res.appointments.filter((a) => !isCancelled(a) && !isInProgress(a));
+      // Fetch all categories with limit=1 to get total_count efficiently
+      const [upcomingRes, pastRes, cancelledRes, allRes] = await Promise.all([
+        listUserAppointments({ when: "upcoming", page: 1, limit: 1, sort: "asc" }),
+        listUserAppointments({ when: "past", page: 1, limit: 1, sort: "desc" }),
+        listUserAppointments({ when: "all", status: "cancelled", page: 1, limit: 1, sort: "desc" }),
+        listUserAppointments({ when: "upcoming", page: 1, limit: 100, sort: "asc" }), // Need full list to filter in-progress
+      ]);
+
+      // Set counts
+      setUpcomingCount(upcomingRes?.total_count || 0);
+      setPastCount(pastRes?.total_count || 0);
+      setCancelledCount(cancelledRes?.total_count || 0);
+
+      // Calculate in-progress from the full upcoming list
+      if (allRes?.appointments) {
+        const inProgressList = allRes.appointments.filter((a) => isInProgress(a));
+        setInprogressCount(inProgressList.length);
+      } else if (Array.isArray(allRes)) {
+        const inProgressList = allRes.filter((a) => isInProgress(a));
+        setInprogressCount(inProgressList.length);
+      }
+
+      // Also load upcoming appointments immediately (they're usually small)
+      if (allRes?.appointments) {
+        const filtered = allRes.appointments.filter((a) => !isCancelled(a) && !isInProgress(a));
         setUpcomingAppts(filtered);
-      } else if (Array.isArray(res)) {
-        const filtered = res.filter((a) => !isCancelled(a) && !isInProgress(a));
+        setUpcomingCount(filtered.length);
+      } else if (Array.isArray(allRes)) {
+        const filtered = allRes.filter((a) => !isCancelled(a) && !isInProgress(a));
         setUpcomingAppts(filtered);
-      } else {
-        setUpcomingAppts([]);
+        setUpcomingCount(filtered.length);
       }
     } catch (e) {
-      console.error("Failed to load upcoming appointments", e);
-      setUpcomingAppts([]);
+      console.error("Failed to load appointment counts", e);
     } finally {
-      setLoadingUpcoming(false);
+      setCountsLoading(false);
     }
   }, []);
 
-  // Load in-progress appointments (always load these)
+  // Load in-progress appointments
   const loadInprogress = useCallback(async () => {
     try {
       setLoadingInprogress(true);
-      // Fetch all upcoming to find in-progress ones
+      setErr("");
+      console.log("Loading in-progress appointments...");
       const res = await listUserAppointments({
         when: "upcoming",
         page: 1,
@@ -96,28 +118,33 @@ export default function Appointments() {
         sort: "asc"
       });
       
-      if (res && res.appointments) {
-        const filtered = res.appointments.filter((a) => isInProgress(a));
-        setInprogressAppts(filtered);
+      console.log("In-progress API response:", res);
+      
+      let appointments = [];
+      if (res?.appointments && Array.isArray(res.appointments)) {
+        appointments = res.appointments;
       } else if (Array.isArray(res)) {
-        const filtered = res.filter((a) => isInProgress(a));
-        setInprogressAppts(filtered);
-      } else {
-        setInprogressAppts([]);
+        appointments = res;
       }
+      
+      const filtered = appointments.filter((a) => isInProgress(a));
+      console.log(`Filtered ${filtered.length} in-progress from ${appointments.length} upcoming`);
+      setInprogressAppts(filtered);
     } catch (e) {
       console.error("Failed to load in-progress appointments", e);
+      setErr(e?.message || "Failed to load in-progress appointments.");
       setInprogressAppts([]);
     } finally {
       setLoadingInprogress(false);
     }
   }, []);
 
-  // Load past appointments (only when tab is clicked)
-  const loadPast = useCallback(async (pageNum = pastPage) => {
+  // Load past appointments
+  const loadPast = useCallback(async (pageNum = 1, append = false) => {
     try {
       setLoadingPast(true);
       setErr("");
+      console.log(`Loading past appointments - page ${pageNum}, append: ${append}`);
       
       const res = await listUserAppointments({
         when: "past",
@@ -126,36 +153,55 @@ export default function Appointments() {
         sort: sortOrder
       });
       
-      if (res && res.appointments) {
-        // Filter out cancelled from past
-        const filtered = res.appointments.filter((a) => !isCancelled(a));
-        setPastAppts(filtered);
-        // Use filtered length for this page, but we need to track total across all pages
-        // For now, use the backend total_count minus an estimate of cancelled
-        // Actually, better: just use the filtered count for this page and calculate total differently
-        // The issue is we don't know total non-cancelled past appointments without fetching all
-        // So let's use the actual filtered length for now and adjust pagination accordingly
-        setPastTotal(res.total_count || filtered.length);
+      console.log("Past appointments API response:", res);
+      
+      let appointments = [];
+      let totalCount = 0;
+      
+      if (res?.appointments && Array.isArray(res.appointments)) {
+        appointments = res.appointments;
+        totalCount = res.total_count || 0;
       } else if (Array.isArray(res)) {
-        const filtered = res.filter((a) => !isCancelled(a));
-        setPastAppts(filtered);
-        setPastTotal(filtered.length);
-      } else {
-        setPastAppts([]);
-        setPastTotal(0);
+        appointments = res;
+        totalCount = res.length;
+      } else if (res && typeof res === 'object') {
+        // Handle error response
+        if (res.error) {
+          throw new Error(res.error);
+        }
+        appointments = [];
+        totalCount = 0;
       }
+      
+      // Backend now excludes cancelled, but filter as safety measure
+      const filtered = appointments.filter((a) => !isCancelled(a));
+      console.log(`Got ${filtered.length} past appointments from API (total_count: ${totalCount})`);
+      
+      if (append) {
+        setPastAppts(prev => {
+          const newList = [...prev, ...filtered];
+          setHasMorePast(filtered.length === pastLimit && newList.length < totalCount);
+          return newList;
+        });
+      } else {
+        setPastAppts(filtered);
+        setHasMorePast(filtered.length === pastLimit && filtered.length < totalCount);
+      }
+      setPastCount(totalCount);
     } catch (e) {
       console.error("Failed to load past appointments", e);
       setErr(e?.message || "Failed to load past appointments.");
-      setPastAppts([]);
-      setPastTotal(0);
+      if (!append) {
+        setPastAppts([]);
+      }
     } finally {
       setLoadingPast(false);
+      console.log("Finished loading past appointments");
     }
-  }, [pastPage, pastLimit, sortOrder]);
+  }, [sortOrder, pastLimit]);
 
-  // Load cancelled appointments (only when tab is clicked)
-  const loadCancelled = useCallback(async (pageNum = cancelledPage) => {
+  // Load cancelled appointments
+  const loadCancelled = useCallback(async (pageNum = 1, append = false) => {
     try {
       setLoadingCancelled(true);
       setErr("");
@@ -168,61 +214,91 @@ export default function Appointments() {
         sort: "desc"
       });
       
-      if (res && res.appointments) {
-        setCancelledAppts(res.appointments);
-        setCancelledTotal(res.total_count || res.appointments.length);
+      if (res?.appointments) {
+        if (append) {
+          setCancelledAppts(prev => {
+            const newList = [...prev, ...res.appointments];
+            setHasMoreCancelled(res.appointments.length === cancelledLimit && newList.length < (res.total_count || 0));
+            return newList;
+          });
+        } else {
+          setCancelledAppts(res.appointments);
+          setHasMoreCancelled(res.appointments.length === cancelledLimit && res.appointments.length < (res.total_count || 0));
+        }
+        setCancelledCount(res.total_count || res.appointments.length);
       } else if (Array.isArray(res)) {
-        setCancelledAppts(res);
-        setCancelledTotal(res.length);
+        if (append) {
+          setCancelledAppts(prev => [...prev, ...res]);
+        } else {
+          setCancelledAppts(res);
+        }
+        setCancelledCount(res.length);
+        setHasMoreCancelled(false);
       } else {
-        setCancelledAppts([]);
-        setCancelledTotal(0);
+        if (!append) {
+          setCancelledAppts([]);
+        }
+        setCancelledCount(0);
+        setHasMoreCancelled(false);
       }
     } catch (e) {
       console.error("Failed to load cancelled appointments", e);
       setErr(e?.message || "Failed to load cancelled appointments.");
-      setCancelledAppts([]);
-      setCancelledTotal(0);
+      if (!append) {
+        setCancelledAppts([]);
+      }
     } finally {
       setLoadingCancelled(false);
     }
-  }, [cancelledPage, cancelledLimit]);
+  }, [cancelledLimit]);
 
-  // Initial load - only load upcoming and inprogress
+  // Initial load - get counts and load upcoming
   useEffect(() => {
-    setLoading(true);
-    Promise.all([loadUpcoming(), loadInprogress()]).finally(() => {
-      setLoading(false);
-    });
-  }, [loadUpcoming, loadInprogress]);
+    loadCounts();
+  }, [loadCounts]);
 
-  // Load past when tab is clicked
+  // Track which tabs have been loaded to prevent infinite loops
+  const [loadedTabs, setLoadedTabs] = useState({
+    inprogress: false,
+    past: false,
+    cancelled: false
+  });
+
+  // Load appointments when tab is clicked
   useEffect(() => {
-    if (tab === "past" && pastAppts.length === 0 && !loadingPast) {
-      loadPast(1);
+    if (tab === "inprogress" && !loadedTabs.inprogress && !loadingInprogress) {
+      console.log("Loading in-progress tab");
+      setLoadedTabs(prev => ({ ...prev, inprogress: true }));
+      loadInprogress();
+    } else if (tab === "past" && !loadedTabs.past && !loadingPast) {
+      console.log("Loading past tab");
+      setLoadedTabs(prev => ({ ...prev, past: true }));
+      setPastPage(1);
+      setHasMorePast(false);
+      loadPast(1, false);
+    } else if (tab === "cancelled" && !loadedTabs.cancelled && !loadingCancelled) {
+      console.log("Loading cancelled tab");
+      setLoadedTabs(prev => ({ ...prev, cancelled: true }));
+      setCancelledPage(1);
+      setHasMoreCancelled(false);
+      loadCancelled(1, false);
     }
-  }, [tab, pastAppts.length, loadingPast, loadPast]);
+  }, [tab, loadInprogress, loadPast, loadCancelled, loadingInprogress, loadingPast, loadingCancelled, loadedTabs]);
 
-  // Load cancelled when tab is clicked
-  useEffect(() => {
-    if (tab === "cancelled" && cancelledAppts.length === 0 && !loadingCancelled) {
-      loadCancelled(1);
-    }
-  }, [tab, cancelledAppts.length, loadingCancelled, loadCancelled]);
-
-  // Reset page when sort changes for past
+  // Reset and reload when sort changes for past
   useEffect(() => {
     if (tab === "past") {
       setPastPage(1);
-      loadPast(1);
+      setPastAppts([]);
+      setHasMorePast(false);
+      loadPast(1, false);
     }
-  }, [sortOrder]);
+  }, [sortOrder, tab, loadPast]);
 
-  // handlers (open modals)
+  // Handlers
   function onReschedule(appt) { setResAppt(appt); }
   function onCancel(appt) { setCancelAppt(appt); }
 
-  // apply updates from modals
   async function handleSubmitReview(id, payload, reviewId = null) {
     const clean = {
       stars: payload.stars,
@@ -242,29 +318,31 @@ export default function Appointments() {
   async function saveNote(apptId, noteText) {
     try {
       await updateAppointment({ id: apptId, notes: noteText?.trim() || null });
-      // Reload the appropriate tab
+      // Reload current tab
       if (tab === "upcoming") {
-        await loadUpcoming();
+        await loadCounts();
+      } else if (tab === "inprogress") {
+        await loadInprogress();
       } else if (tab === "past") {
-        await loadPast(pastPage);
+        await loadPast(pastPage, false);
       } else if (tab === "cancelled") {
-        await loadCancelled(cancelledPage);
+        await loadCancelled(cancelledPage, false);
       }
     } catch (e) {
       console.error("Failed to save note", e);
     }
   }
 
-  const handlePastPageChange = (newPage) => {
-    if (newPage < 1 || newPage > Math.ceil(pastTotal / pastLimit)) return;
-    setPastPage(newPage);
-    loadPast(newPage);
+  const handleLoadMorePast = () => {
+    const nextPage = pastPage + 1;
+    setPastPage(nextPage);
+    loadPast(nextPage, true);
   };
 
-  const handleCancelledPageChange = (newPage) => {
-    if (newPage < 1 || newPage > Math.ceil(cancelledTotal / cancelledLimit)) return;
-    setCancelledPage(newPage);
-    loadCancelled(newPage);
+  const handleLoadMoreCancelled = () => {
+    const nextPage = cancelledPage + 1;
+    setCancelledPage(nextPage);
+    loadCancelled(nextPage, true);
   };
 
   const handleSortChange = (newSort) => {
@@ -274,35 +352,26 @@ export default function Appointments() {
 
   const reloadCurrentTab = useCallback(async () => {
     if (tab === "upcoming") {
-      await loadUpcoming();
+      await loadCounts();
     } else if (tab === "inprogress") {
       await loadInprogress();
     } else if (tab === "past") {
-      await loadPast(pastPage);
+      await loadPast(1, false);
     } else if (tab === "cancelled") {
-      await loadCancelled(cancelledPage);
+      await loadCancelled(1, false);
     }
-  }, [tab, pastPage, cancelledPage, loadUpcoming, loadInprogress, loadPast, loadCancelled]);
-
-  if (loading && upcomingAppts.length === 0 && inprogressAppts.length === 0) {
-    return <div className="max-w-6xl mx-auto p-6 text-gray-600">Loading…</div>;
-  }
-  if (err && tab !== "upcoming" && tab !== "inprogress") {
-    return <div className="max-w-6xl mx-auto p-6 text-red-600">{err}</div>;
-  }
+  }, [tab, loadCounts, loadInprogress, loadPast, loadCancelled]);
 
   const currentAppts = tab === "upcoming" ? upcomingAppts : 
                       tab === "inprogress" ? inprogressAppts :
                       tab === "past" ? pastAppts : cancelledAppts;
-  const currentLoading = tab === "upcoming" ? loadingUpcoming :
+  const currentLoading = tab === "upcoming" ? false :
                         tab === "inprogress" ? loadingInprogress :
                         tab === "past" ? loadingPast : loadingCancelled;
-  const currentTotal = tab === "past" ? pastTotal : 
-                       tab === "cancelled" ? cancelledTotal : 
-                       (tab === "upcoming" ? upcomingAppts.length : inprogressAppts.length);
-  const currentPage = tab === "past" ? pastPage : cancelledPage;
-  const currentLimit = tab === "past" ? pastLimit : cancelledLimit;
-  const totalPages = Math.ceil(currentTotal / currentLimit);
+
+  if (countsLoading) {
+    return <div className="max-w-6xl mx-auto p-6 text-gray-600">Loading…</div>;
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -323,9 +392,9 @@ export default function Appointments() {
               </Select>
             </div>
           )}
-          {(tab === "past" || tab === "cancelled") && currentTotal > 0 && (
+          {(tab === "past" || tab === "cancelled") && (
             <div className="text-sm text-gray-600">
-              Showing {(currentPage - 1) * currentLimit + 1} to {Math.min((currentPage - 1) * currentLimit + currentAppts.length, currentTotal)} of {currentTotal}
+              Showing {currentAppts.length} of {tab === "past" ? pastCount : cancelledCount}
             </div>
           )}
         </div>
@@ -334,10 +403,10 @@ export default function Appointments() {
       <div className="rounded-full bg-gray-100 p-1 w-full md:w-[720px]">
         <div className="grid grid-cols-4">
           {[
-            ["upcoming", `Upcoming (${upcomingAppts.length})`],
-            ["inprogress", `In Progress (${inprogressAppts.length})`],
-            ["past", `Past (${tab === "past" ? currentTotal : "-"})`],
-            ["cancelled", `Cancelled (${tab === "cancelled" ? currentTotal : "-"})`],
+            ["upcoming", `Upcoming (${upcomingCount})`],
+            ["inprogress", `In Progress (${inprogressCount})`],
+            ["past", `Past (${pastCount})`],
+            ["cancelled", `Cancelled (${cancelledCount})`],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -352,10 +421,12 @@ export default function Appointments() {
         </div>
       </div>
 
+      {err && (tab === "past" || tab === "cancelled") && (
+        <div className="text-sm text-red-600">{err}</div>
+      )}
+
       {tab === "upcoming" && (
-        currentLoading ? (
-          <div className="text-sm text-gray-600">Loading upcoming appointments…</div>
-        ) : upcomingAppts.length === 0 ? (
+        upcomingAppts.length === 0 ? (
           <div className="text-sm text-gray-600">No upcoming appointments.</div>
         ) : (
           <div className="space-y-4">
@@ -395,69 +466,68 @@ export default function Appointments() {
       )}
 
       {tab === "past" && (
-        currentLoading ? (
+        currentLoading && pastAppts.length === 0 ? (
           <div className="text-sm text-gray-600">Loading past appointments…</div>
         ) : pastAppts.length === 0 ? (
           <div className="text-sm text-gray-600">No past appointments.</div>
         ) : (
-          <div className="space-y-4">
-            {pastAppts.map((a) => (
-              <AppointmentCard key={a.id} appt={a} compact onReviewSubmitted={reloadCurrentTab}>
-                {a.status === "completed" && !a.review ? (
-                  <PostAppointmentReview
-                    appointmentId={a.id}
-                    existingReview={a.review}
-                    salonName={a.salon?.name}
-                    employeeName={a.barber?.name || a.employee?.name}
-                    onSubmit={handleSubmitReview}
-                    onReviewSubmitted={reloadCurrentTab}
-                  />
-                ) : null}
-              </AppointmentCard>
-            ))}
-          </div>
+          <>
+            <div className="space-y-4">
+              {pastAppts.map((a) => (
+                <AppointmentCard key={a.id} appt={a} compact onReviewSubmitted={reloadCurrentTab}>
+                  {a.status === "completed" && !a.review ? (
+                    <PostAppointmentReview
+                      appointmentId={a.id}
+                      existingReview={a.review}
+                      salonName={a.salon?.name}
+                      employeeName={a.barber?.name || a.employee?.name}
+                      onSubmit={handleSubmitReview}
+                      onReviewSubmitted={reloadCurrentTab}
+                    />
+                  ) : null}
+                </AppointmentCard>
+              ))}
+            </div>
+            {hasMorePast && (
+              <div className="flex justify-center pt-4">
+                <Button
+                  variant="outline"
+                  onClick={handleLoadMorePast}
+                  disabled={currentLoading}
+                >
+                  {currentLoading ? "Loading..." : "Load More"}
+                </Button>
+              </div>
+            )}
+          </>
         )
       )}
 
       {tab === "cancelled" && (
-        currentLoading ? (
+        currentLoading && cancelledAppts.length === 0 ? (
           <div className="text-sm text-gray-600">Loading cancelled appointments…</div>
         ) : cancelledAppts.length === 0 ? (
           <div className="text-sm text-gray-600">No cancelled appointments.</div>
         ) : (
-          <div className="space-y-4">
-            {cancelledAppts.map((a) => (
-              <AppointmentCard key={a.id} appt={a} compact onSaveNote={saveNote} onReviewSubmitted={reloadCurrentTab} />
-            ))}
-          </div>
+          <>
+            <div className="space-y-4">
+              {cancelledAppts.map((a) => (
+                <AppointmentCard key={a.id} appt={a} compact onSaveNote={saveNote} onReviewSubmitted={reloadCurrentTab} />
+              ))}
+            </div>
+            {hasMoreCancelled && (
+              <div className="flex justify-center pt-4">
+                <Button
+                  variant="outline"
+                  onClick={handleLoadMoreCancelled}
+                  disabled={currentLoading}
+                >
+                  {currentLoading ? "Loading..." : "Load More"}
+                </Button>
+              </div>
+            )}
+          </>
         )
-      )}
-
-      {/* Pagination for past/cancelled */}
-      {(tab === "past" || tab === "cancelled") && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => tab === "past" ? handlePastPageChange(currentPage - 1) : handleCancelledPageChange(currentPage - 1)}
-            disabled={currentPage === 1 || currentLoading}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
-          </Button>
-          <span className="text-sm text-gray-600">
-            Page {currentPage} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => tab === "past" ? handlePastPageChange(currentPage + 1) : handleCancelledPageChange(currentPage + 1)}
-            disabled={currentPage >= totalPages || currentLoading}
-          >
-            Next
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
       )}
 
       {resAppt && (

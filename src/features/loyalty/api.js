@@ -30,7 +30,8 @@ export async function getLoyaltyRewards(salonId = null) {
     const response = await api(`/loyalty/rewards?salon_id=${salonId}`);
     return {
       pointThreshold: response.pointThreshold || 100,
-      rewardDiscount: response.rewardDiscount || 10
+      rewardDiscount: response.rewardDiscount || 10,
+      pointsPerDollar: response.pointsPerDollar || 1.0
     };
   } catch (error) {
     console.error("Failed to fetch loyalty rewards:", error);

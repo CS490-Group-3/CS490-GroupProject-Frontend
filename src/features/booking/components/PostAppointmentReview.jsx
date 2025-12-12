@@ -266,9 +266,22 @@ export default function PostAppointmentReview({
     const reviewBeforeImgs = reviewImages.filter(img => img.label === "before" || img.type === "before");
     const reviewAfterImgs = reviewImages.filter(img => img.label === "after" || img.type === "after");
     
-    // Combine both sources
-    const allBeforeImgs = [...beforeImgs, ...reviewBeforeImgs];
-    const allAfterImgs = [...afterImgs, ...reviewAfterImgs];
+    // Combine both sources and deduplicate by ID
+    const combineAndDedupe = (arr1, arr2) => {
+      const seen = new Set();
+      const result = [];
+      [...arr1, ...arr2].forEach(img => {
+        const id = img.id || img.file_url;
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          result.push(img);
+        }
+      });
+      return result;
+    };
+    
+    const allBeforeImgs = combineAndDedupe(beforeImgs, reviewBeforeImgs);
+    const allAfterImgs = combineAndDedupe(afterImgs, reviewAfterImgs);
     
     return (
       <>
@@ -311,7 +324,7 @@ export default function PostAppointmentReview({
                   <h4 className="text-xs font-medium text-gray-600 mb-2">Before</h4>
                   <div className="flex gap-2 flex-wrap">
                     {allBeforeImgs.map((img, idx) => (
-                      <div key={img.id || `before-${idx}`} className="relative group">
+                      <div key={`before-${img.id || img.file_url || idx}-${idx}`} className="relative group">
                         <img
                           src={getImageUrl(img) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2U1ZTdlYiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5Y2EzYWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBub3QgYXZhaWxhYmxlPC90ZXh0Pjwvc3ZnPg=='}
                           alt="Before"
@@ -342,7 +355,7 @@ export default function PostAppointmentReview({
                   <h4 className="text-xs font-medium text-gray-600 mb-2">After</h4>
                   <div className="flex gap-2 flex-wrap">
                     {allAfterImgs.map((img, idx) => (
-                      <div key={img.id || `after-${idx}`} className="relative group">
+                      <div key={`after-${img.id || img.file_url || idx}-${idx}`} className="relative group">
                         <img
                           src={getImageUrl(img) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2U1ZTdlYiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5Y2EzYWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBub3QgYXZhaWxhYmxlPC90ZXh0Pjwvc3ZnPg=='}
                           alt="After"
@@ -431,9 +444,9 @@ export default function PostAppointmentReview({
             <label className="text-sm font-medium text-gray-700 text-center">Before Photos</label>
             <label className="h-80 w-full max-w-md border-2 border-dashed border-gray-300 rounded-lg grid grid-cols-2 gap-1 p-1 cursor-pointer hover:border-gray-400 transition relative overflow-hidden">
               {/* Show existing before images */}
-              {existingImages.filter(img => img.label === "before" || img.type === "before").map((img) => (
+              {existingImages.filter(img => img.label === "before" || img.type === "before").map((img, idx) => (
                 <div 
-                  key={`existing-${img.id}`} 
+                  key={`existing-before-${img.id || img.file_url || idx}-${idx}`} 
                   className="relative group"
                 >
                   <img
@@ -494,9 +507,9 @@ export default function PostAppointmentReview({
             <label className="text-sm font-medium text-gray-700 text-center">After Photos</label>
             <label className="h-80 w-full max-w-md border-2 border-dashed border-gray-300 rounded-lg grid grid-cols-2 gap-1 p-1 cursor-pointer hover:border-gray-400 transition relative overflow-hidden">
               {/* Show existing after images */}
-              {existingImages.filter(img => img.label === "after" || img.type === "after").map((img) => (
+              {existingImages.filter(img => img.label === "after" || img.type === "after").map((img, idx) => (
                 <div 
-                  key={`existing-${img.id}`} 
+                  key={`existing-after-${img.id || img.file_url || idx}-${idx}`} 
                   className="relative group"
                 >
                   <img

@@ -786,41 +786,46 @@ export default function ProviderDashboard() {
       return;
     }
 
-    const conflictingTime = editFormData.time;
-    const range = slotToRange(selectedDate, conflictingTime);
     const isPast = isPastAppointment(editingAppointment);
     const isInProg = isInProgressAppointment(editingAppointment);
-    const hasConflict = todayAppointments.some((a) => {
-      if (a.id === editingAppointment?.id) return false;
-      const start = a.start_at
-        ? new Date(a.start_at)
-        : new Date(`${a.appointment_date}T${a.start_time}`);
-      const end =
-        a.end_at || a.end_time
-          ? new Date(a.end_at || `${a.appointment_date}T${a.end_time}`)
-          : new Date(start.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
-      return start < range.end && end > range.start;
-    });
-    const isBlocked = blockedWindows.some(
-      (b) =>
-        new Date(b.start_datetime) < range.end &&
-        new Date(b.end_datetime) > range.start
-    );
-
-    if (hasConflict) {
-      setConflictError(
-        `Cannot schedule at ${conflictingTime} - Time slot is already booked`
+    
+    // Only check for time conflicts if it's NOT a past appointment
+    // Past appointments can't be rescheduled, only status can be changed
+    if (!isPast) {
+      const conflictingTime = editFormData.time;
+      const range = slotToRange(selectedDate, conflictingTime);
+      const hasConflict = todayAppointments.some((a) => {
+        if (a.id === editingAppointment?.id) return false;
+        const start = a.start_at
+          ? new Date(a.start_at)
+          : new Date(`${a.appointment_date}T${a.start_time}`);
+        const end =
+          a.end_at || a.end_time
+            ? new Date(a.end_at || `${a.appointment_date}T${a.end_time}`)
+            : new Date(start.getTime() + SLOT_DURATION_MINUTES * 60 * 1000);
+        return start < range.end && end > range.start;
+      });
+      const isBlocked = blockedWindows.some(
+        (b) =>
+          new Date(b.start_datetime) < range.end &&
+          new Date(b.end_datetime) > range.start
       );
-      setTimeout(() => setConflictError(null), 5000);
-      return;
-    }
 
-    if (isBlocked) {
-      setConflictError(
-        `Cannot schedule at ${conflictingTime} - Time slot is blocked`
-      );
-      setTimeout(() => setConflictError(null), 5000);
-      return;
+      if (hasConflict) {
+        setConflictError(
+          `Cannot schedule at ${conflictingTime} - Time slot is already booked`
+        );
+        setTimeout(() => setConflictError(null), 5000);
+        return;
+      }
+
+      if (isBlocked) {
+        setConflictError(
+          `Cannot schedule at ${conflictingTime} - Time slot is blocked`
+        );
+        setTimeout(() => setConflictError(null), 5000);
+        return;
+      }
     }
 
     // enforce allowed statuses by context
@@ -836,27 +841,33 @@ export default function ProviderDashboard() {
 
     try {
       setSavingEdit(true);
+      const appointmentId = editingAppointment.id;
+      
       if (!isPast && !isInProg) {
-        await patchAppointment({
-          id: editingAppointment.id,
+        await patchAppointment(appointmentId, {
           status: "cancelled",
           notes: editFormData.notes || undefined,
           reason: editFormData.cancel_reason || undefined,
         });
       } else if (isCanceled(editingAppointment)) {
         // Past canceled: no status/time changes allowed
-        await patchAppointment({
-          id: editingAppointment.id,
+        await patchAppointment(appointmentId, {
           status: "cancelled",
           notes: editFormData.notes || undefined,
         });
       } else {
-        await patchAppointment({
-          id: editingAppointment.id,
-          status: editFormData.status,
-          notes: editFormData.notes || undefined,
-          reason: editFormData.status === "cancelled" ? editFormData.cancel_reason || undefined : undefined,
-        });
+        // For completed/no_show, use the complete endpoint
+        if (editFormData.status === "completed" || editFormData.status === "no_show") {
+          // Use the mark_completed endpoint for these statuses
+          const { markAppointmentComplete } = await import("../../salon-reg/api.js");
+          await markAppointmentComplete(appointmentId, editFormData.status);
+        } else {
+          await patchAppointment(appointmentId, {
+            status: editFormData.status,
+            notes: editFormData.notes || undefined,
+            reason: editFormData.status === "cancelled" ? editFormData.cancel_reason || undefined : undefined,
+          });
+        }
       }
       setConflictError(null);
       setShowEditModal(false);
