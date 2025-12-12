@@ -43,8 +43,18 @@ export default function Loyalty() {
         setSalonBalances(balances);
         
         // Auto-select first salon if available and not already selected
-        if (balances.length > 0 && balances[0].salon_id) {
-          setSelectedSalonId(balances[0].salon_id);
+        const firstSalonId = balances.length > 0 && balances[0].salon_id ? balances[0].salon_id : null;
+        if (firstSalonId) {
+          setSelectedSalonId(firstSalonId);
+          // Immediately load rewards for first salon (high priority - load early)
+          getLoyaltyRewards(firstSalonId)
+            .then((rewardsData) => {
+              if (!alive) return;
+              setRewards(rewardsData);
+            })
+            .catch((err) => {
+              console.error("Failed to load rewards:", err);
+            });
         }
         
         // Load promotions for all salons asynchronously
@@ -146,19 +156,21 @@ export default function Loyalty() {
     };
   }, []);
 
-  // Load rewards when salon is selected
+  // Load rewards when salon is selected (if not already loaded)
   useEffect(() => {
     if (!selectedSalonId) return;
     
     let alive = true;
     (async () => {
       try {
-        const rewardsData = await getLoyaltyRewards(selectedSalonId).catch(() => null);
+        setRewards(null); // Reset to show loading
+        const rewardsData = await getLoyaltyRewards(selectedSalonId);
         if (!alive) return;
         setRewards(rewardsData);
       } catch (err) {
         if (!alive) return;
         console.error("Failed to load rewards:", err);
+        setRewards(null); // Keep as null on error
       }
     })();
     return () => {
@@ -377,6 +389,18 @@ export default function Loyalty() {
               <div className="text-sm text-gray-600 mb-2">{selectedSalon.salon_name || "Salon"}</div>
               <div className="text-5xl font-bold text-gray-900 mb-2">{currentBalance}</div>
               <div className="text-lg text-gray-600 mb-4">Loyalty Points</div>
+              <div className="mb-4">
+                <div className="text-sm text-gray-500">Earning Rate</div>
+                {rewards && rewards.pointsPerDollar ? (
+                  <div className="text-base font-semibold text-indigo-600">
+                    {rewards.pointsPerDollar} point{rewards.pointsPerDollar !== 1 ? 's' : ''} per dollar
+                  </div>
+                ) : (
+                  <div className="text-base font-semibold text-gray-400">
+                    Loading...
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t">
                 <div>
                   <div className="text-sm text-gray-500">Lifetime Earned</div>
@@ -553,6 +577,11 @@ export default function Loyalty() {
                     }
                   }
                   
+                  // Show appointment date if available and description contains no-show
+                  const showAppointmentDate = item.appointmentDate && 
+                    (item.description?.toLowerCase().includes("no-show") || 
+                     item.description?.toLowerCase().includes("appointment"));
+                  
                   return (
                     <div
                       key={item.id}
@@ -560,7 +589,13 @@ export default function Loyalty() {
                     >
                       <div className="flex-1">
                         <div className="font-medium text-gray-900">{item.description}</div>
-                        <div className="text-sm text-gray-500">{formattedDate}</div>
+                        <div className="text-sm text-gray-500">
+                          {showAppointmentDate && item.appointmentDate ? (
+                            <span>Appointment: {item.appointmentDate} • {formattedDate}</span>
+                          ) : (
+                            formattedDate
+                          )}
+                        </div>
                       </div>
                       <div
                         className={`text-lg font-semibold ${
