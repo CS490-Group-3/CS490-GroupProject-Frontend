@@ -101,15 +101,63 @@ export async function createProduct(productData) {
 /**
  * Update a product
  * Send only the fields you want to update (all fields optional)
+ * If updates.image is a File object, sends as multipart/form-data
+ * Otherwise sends as JSON
  * @param {string} productId - Product ID
  * @param {Object} updates - Product updates (all fields optional)
+ * @param {File} updates.image - Image file (optional, if provided uses multipart/form-data)
  * @returns {Promise<{product: Object, message: string}>}
  */
 export async function updateProduct(productId, updates) {
-  return api(`/products/${productId}`, {
-    method: "PATCH",
-    body: updates, // api() will stringify it
-  });
+  // Check if there's an image file to upload
+  const hasImage = updates.image && updates.image instanceof File;
+  
+  if (hasImage) {
+    // Use FormData for multipart/form-data
+    const formData = new FormData();
+    
+    // Add all fields except image
+    Object.keys(updates).forEach(key => {
+      if (key !== 'image' && updates[key] !== undefined && updates[key] !== null) {
+        formData.append(key, String(updates[key]));
+      }
+    });
+    
+    // Add image file (backend expects field name "file")
+    formData.append("file", updates.image);
+    
+    const token = localStorage.getItem("access_token");
+    const apiUrl = import.meta.env.VITE_API;
+    
+    const response = await fetch(`${apiUrl}/products/${productId}`, {
+      method: "PATCH",
+      headers: {
+        "Authorization": token ? `Bearer ${token}` : "",
+        // Don't set Content-Type - browser will set it with boundary for FormData
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = errorText;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorJson.message || errorText;
+      } catch {
+        // If not JSON, use the text as-is
+      }
+      throw new Error(errorMessage);
+    }
+    
+    return response.json();
+  } else {
+    // Use regular JSON API call
+    return api(`/products/${productId}`, {
+      method: "PATCH",
+      body: updates, // api() will stringify it
+    });
+  }
 }
 
 /**
@@ -163,6 +211,33 @@ export async function createCategory(categoryData) {
  */
 export async function getCategory(categoryId) {
   return api(`/products/categories/${categoryId}`);
+}
+
+/**
+ * Update a product category (admin only)
+ * @param {string} categoryId - Category ID
+ * @param {Object} updates - Category updates (all fields optional)
+ * @param {string} updates.name - Category name
+ * @param {string} updates.description - Category description
+ * @param {string} updates.parent_category_id - Parent category ID (optional)
+ * @returns {Promise<{category: Object, message: string}>}
+ */
+export async function updateCategory(categoryId, updates) {
+  return api(`/products/categories/${categoryId}`, {
+    method: "PATCH",
+    body: updates,
+  });
+}
+
+/**
+ * Delete a product category (admin only)
+ * @param {string} categoryId - Category ID
+ * @returns {Promise<{message: string}>}
+ */
+export async function deleteCategory(categoryId) {
+  return api(`/products/categories/${categoryId}`, {
+    method: "DELETE",
+  });
 }
 
 /**

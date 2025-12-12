@@ -7,6 +7,7 @@ const AdminVerify = lazy(() => import("./pages/AdminVerify.jsx"));
 const AdminAnalytics = lazy(() => import("./pages/AdminAnalytics.jsx"));
 const AdminRevenue = lazy(() => import("./pages/AdminRevenue.jsx"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs.jsx"));
+const ProductCategories = lazy(() => import("./pages/ProductCategories.jsx"));
 
 export default [
   { 
@@ -32,5 +33,9 @@ export default [
   { 
     path: "/admin/audit-logs", 
     element: <RoleGate allow={["admin"]}><AuditLogs /></RoleGate> 
+  },
+  { 
+    path: "/admin/product-categories", 
+    element: <RoleGate allow={["admin"]}><ProductCategories /></RoleGate> 
   },
 ];

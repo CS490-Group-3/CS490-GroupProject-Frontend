@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../shared/ui/card";
 import { Badge } from "../../../shared/ui/badge";
 import { Button } from "../../../shared/ui/button";
-import { Building2, Users, Calendar, TrendingUp, AlertCircle, Clock, CheckCircle, XCircle, FileText, Shield, BarChart3, UserCog, Repeat } from "lucide-react";
+import { Building2, Users, Calendar, TrendingUp, AlertCircle, Clock, CheckCircle, XCircle, FileText, Shield, BarChart3, UserCog, Repeat, Tag } from "lucide-react";
 import { getPendingSalons, getPlatformMetrics } from "../api.js";
 import { useNavigate } from "react-router-dom";
 
@@ -223,6 +223,14 @@ export default function AdminDashboard() {
                 >
                   <Shield className="h-4 w-4 mr-2" />
                   View Audit Logs
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => navigate("/admin/product-categories")}
+                >
+                  <Tag className="h-4 w-4 mr-2" />
+                  Manage Product Categories
                 </Button>
               </CardContent>
             </Card>
