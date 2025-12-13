@@ -63,6 +63,9 @@ export default function PaymentForm({
     let alive = true;
     (async () => {
       try {
+        // Determine context: appointments if appointmentId or appointmentData exists, otherwise products
+        const context = (appointmentId || appointmentData) ? "appointments" : "products";
+        
         const [methods, points] = await Promise.all([
           getSavedPaymentMethods(),
           showLoyaltyRedemption && salonId ? getCustomerPoints() : Promise.resolve([])
@@ -88,7 +91,7 @@ export default function PaymentForm({
           try {
             const [rewards, promotionsRes] = await Promise.all([
               getLoyaltyRewards(salonId).catch(() => null),
-              getShopPromotions(salonId, amount).catch(() => ({ promotions: [] }))
+              getShopPromotions(salonId, amount, context).catch(() => ({ promotions: [] }))
             ]);
             if (!alive) return;
             setLoyaltyRewards(rewards);
@@ -106,7 +109,7 @@ export default function PaymentForm({
         } else if (salonId && amount > 0) {
           // Load promotions even if loyalty redemption is disabled
           try {
-            const promotionsRes = await getShopPromotions(salonId, amount);
+            const promotionsRes = await getShopPromotions(salonId, amount, context);
             if (!alive) return;
             setPromotions(promotionsRes?.promotions || []);
           } catch (err) {
@@ -119,7 +122,7 @@ export default function PaymentForm({
     })();
     
     return () => { alive = false; };
-  }, [salonId, showLoyaltyRedemption, useNewCard]);
+  }, [salonId, showLoyaltyRedemption, useNewCard, appointmentId, appointmentData, amount]);
 
   // Calculate promotion discount
   useEffect(() => {

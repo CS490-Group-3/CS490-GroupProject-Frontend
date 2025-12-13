@@ -98,14 +98,36 @@ export default function NotificationDrawer() {
 
   // Load on mount and when drawer opens
   useEffect(() => {
-    if (user) {
-      loadNotifications();
-      // Refresh periodically when drawer is open
-      if (open) {
-        const interval = setInterval(loadNotifications, 30000); // Refresh every 30 seconds
-        return () => clearInterval(interval);
-      }
+    if (!user) return;
+    
+    loadNotifications();
+    // Refresh periodically when drawer is open
+    if (open) {
+      const interval = setInterval(loadNotifications, 30000); // Refresh every 30 seconds
+      
+      // Refresh when drawer opens (user clicks notification icon)
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible" && open) {
+          loadNotifications();
+        }
+      };
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      
+      // Refresh when window gains focus
+      const handleFocus = () => {
+        if (open) {
+          loadNotifications();
+        }
+      };
+      window.addEventListener("focus", handleFocus);
+      
+      return () => {
+        clearInterval(interval);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+        window.removeEventListener("focus", handleFocus);
+      };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, open]);
 
   // Filter notifications based on selected tab

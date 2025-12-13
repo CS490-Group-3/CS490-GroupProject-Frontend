@@ -10,9 +10,10 @@ import { api } from "../../shared/api/client.js";
  * Uses query parameters: /api/products?salon_id=<salon_id>&category_id=<category_id1>&category_id=<category_id2>
  * @param {string} salonId - Salon ID (required)
  * @param {string[]} categoryIds - Optional category IDs to filter by
+ * @param {boolean} includeInactive - If true, includes inactive products (for salon owners)
  * @returns {Promise<{products: Array}>}
  */
-export async function listProducts(salonId, categoryIds = []) {
+export async function listProducts(salonId, categoryIds = [], includeInactive = false) {
   // Build query string with salon_id (required)
   const params = new URLSearchParams();
   params.append("salon_id", salonId);
@@ -25,6 +26,11 @@ export async function listProducts(salonId, categoryIds = []) {
         params.append("category_id", categoryId);
       }
     });
+  }
+  
+  // Add include_inactive parameter for salon owners
+  if (includeInactive) {
+    params.append("include_inactive", "true");
   }
   
   // Use standard api() function with query parameters
@@ -343,6 +349,10 @@ export async function checkout(checkoutData) {
  * @param {number} purchaseAmount - Purchase amount to filter by min_purchase_amount
  * @returns {Promise<{promotions: Array}>}
  */
-export async function getActivePromotions(salonId, purchaseAmount = 0) {
-  return api(`/salons/${salonId}/promotions/active?purchase_amount=${purchaseAmount}`);
+export async function getActivePromotions(salonId, purchaseAmount = 0, context = null) {
+  let url = `/salons/${salonId}/promotions/active?purchase_amount=${purchaseAmount}`;
+  if (context) {
+    url += `&context=${context}`;
+  }
+  return api(url);
 }

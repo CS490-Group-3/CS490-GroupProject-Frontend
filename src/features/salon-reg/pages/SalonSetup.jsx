@@ -7,7 +7,7 @@ import { Label } from "../../../shared/ui/label";
 import { Textarea } from "../../../shared/ui/textarea";
 import { Alert, AlertDescription } from "../../../shared/ui/alert";
 import { Badge } from "../../../shared/ui/badge";
-import { CheckCircle2, Clock, X, Plus, Search, Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, X, Plus, Search, Loader2, Lock } from "lucide-react";
 import {
   getOwnedSalon,
   checkSetupStatus,
@@ -519,15 +519,24 @@ export default function SalonSetup() {
       </Card>
 
       {/* Step 2: Services */}
-      <Card>
+      <Card className={!setupStatus.hasHours ? "opacity-60" : ""}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {setupStatus.hasServices && <CheckCircle2 className="h-5 w-5 text-green-600" />}
+            {!setupStatus.hasHours && <Lock className="h-5 w-5 text-gray-400" />}
             Step 2: Add Services
           </CardTitle>
           <CardDescription>Create services that customers can book</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!setupStatus.hasHours ? (
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+              <Lock className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-gray-600 font-medium">Complete Step 1 first</p>
+              <p className="text-sm text-gray-500 mt-1">You must set your salon hours before adding services.</p>
+            </div>
+          ) : (
+            <>
           {services.length > 0 && (
             <div className="space-y-3">
               <h4 className="font-semibold text-lg">Your Services:</h4>
@@ -707,19 +716,30 @@ export default function SalonSetup() {
               </div>
             </form>
           )}
+            </>
+          )}
         </CardContent>
       </Card>
 
       {/* Step 3: Employees */}
-      <Card>
+      <Card className={!setupStatus.hasServices ? "opacity-60" : ""}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {setupStatus.hasEmployees && <CheckCircle2 className="h-5 w-5 text-green-600" />}
+            {!setupStatus.hasServices && <Lock className="h-5 w-5 text-gray-400" />}
             Step 3: Add Employees
           </CardTitle>
           <CardDescription>Add barbers to your salon</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!setupStatus.hasServices ? (
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+              <Lock className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-gray-600 font-medium">Complete Step 2 first</p>
+              <p className="text-sm text-gray-500 mt-1">You must add at least one service before adding employees.</p>
+            </div>
+          ) : (
+            <>
           {employees.length > 0 && (
             <div className="space-y-2">
               <h4 className="font-semibold">Current Employees:</h4>
@@ -947,6 +967,8 @@ export default function SalonSetup() {
                 </div>
               )}
             </div>
+          )}
+            </>
           )}
         </CardContent>
       </Card>

@@ -96,20 +96,32 @@ export default function OwnerDashboard() {
         email: salonData.email || "",
       });
       
-      // Check setup status if salon is verified
+      // Use setup_complete from backend response directly (more reliable)
+      // Only check setup status if setup_complete is not provided or if we need to refresh
       if (salonData.status === "verified" && salonData.id) {
-        try {
-          const setupStatus = await checkSetupStatus(salonData.id);
-          setSetupComplete(setupStatus.isComplete);
-        } catch (err) {
-          console.error("Error checking setup status:", err);
-          setSetupComplete(false);
+        // Use setup_complete from backend if available, otherwise check
+        if (salonData.setup_complete !== undefined && salonData.setup_complete !== null) {
+          // Backend provides setup_complete - use it directly (no async check needed)
+          setSetupComplete(salonData.setup_complete);
+          setCheckingSetup(false); // We have the answer, no need to check
+        } else {
+          // Fallback: check setup status if not in response (shouldn't happen with updated backend)
+          try {
+            const setupStatus = await checkSetupStatus(salonData.id);
+            setSetupComplete(setupStatus.isComplete);
+          } catch (err) {
+            console.error("Error checking setup status:", err);
+            setSetupComplete(false);
+          } finally {
+            setCheckingSetup(false); // Done checking
+          }
         }
         
         // Load full salon details
         await loadFullSalonData(salonData.id);
       } else {
         setSetupComplete(null);
+        setCheckingSetup(false); // Not verified, no need to check
       }
     } catch (err) {
       console.error("Error loading salon:", err);
@@ -120,9 +132,10 @@ export default function OwnerDashboard() {
         setSalonId(null);
         setSetupComplete(null);
       }
+      setCheckingSetup(false); // Error occurred, stop checking
     } finally {
       setLoading(false);
-      setCheckingSetup(false);
+      // Don't set checkingSetup here - it's set above when we know the answer
     }
   };
 
@@ -526,8 +539,12 @@ export default function OwnerDashboard() {
     );
   }
 
-  // Only show setup required if we're not loading and setup is confirmed to be incomplete
-  if (!loading && !checkingSetup && setupComplete === false) {
+  // Only show setup required if:
+  // 1. Not loading
+  // 2. Not checking setup (we have the answer)
+  // 3. Setup is explicitly false (not null - null means unknown/not verified)
+  // 4. Salon is verified (double-check to prevent race conditions)
+  if (!loading && !checkingSetup && setupComplete === false && salon?.status === "verified") {
     return (
       <div className="max-w-6xl mx-auto p-6">
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">

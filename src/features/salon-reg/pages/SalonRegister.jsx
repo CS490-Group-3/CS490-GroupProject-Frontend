@@ -55,9 +55,17 @@ export default function SalonRegister() {
       }
 
       if (salon.status === "verified") {
-        // Check if setup is complete
-        const setupStatus = await checkSetupStatus(salon.id);
-        if (!setupStatus.isComplete) {
+        // Use setup_complete from backend response directly if available
+        let isSetupComplete = false;
+        if (salon.setup_complete !== undefined && salon.setup_complete !== null) {
+          isSetupComplete = salon.setup_complete;
+        } else {
+          // Fallback: check setup status if not in response
+          const setupStatus = await checkSetupStatus(salon.id);
+          isSetupComplete = setupStatus.isComplete;
+        }
+        
+        if (!isSetupComplete) {
           // Redirect to setup page if not complete
           navigate("/salon-setup");
           return;
@@ -73,44 +81,18 @@ export default function SalonRegister() {
         setStatus("rejected");
         setShowForm(true);
         setIsEditing(true);
-        // Reset form fields for fresh appeal (don't preload old data)
-        setName("");
-        setAddress("");
-        setCity("");
-        setState("");
-        setZip("");
-        setPhone("");
-        setEmail("");
-        setDescription("");
-        setTimezone("America/New_York");
-        setLogoFile(null);
-        setLicenseFile(null);
-        // Fetch rejection reason from status history
-        try {
-          const history = await getSalonStatusHistory(salon.id);
-          const rejectionNotif = history.timeline?.find(n => 
-            n.title === "Salon Denied" || n.message?.includes("Denied")
-          );
-          if (rejectionNotif?.message) {
-            // Extract reason from message (format: "Your Salon has been Denied. Reason(s): {reason}")
-            const reasonMatch = rejectionNotif.message.match(/Reason\(s\):\s*(.+)/i);
-            if (reasonMatch) {
-              setRejectionReason(reasonMatch[1].trim());
-            } else {
-              setRejectionReason(rejectionNotif.message);
-            }
-          }
-        } catch (err) {
-          console.error("Failed to fetch rejection reason:", err);
-        }
+        // Use rejection reason directly from salon object
+        setRejectionReason(salon.rejection_reason || "");
+        // Keep form fields populated so owner can edit and resubmit
+        // Don't reset - load existing data
       } else {
         setStatus("not_submitted");
         setShowForm(true);
         setIsEditing(true);
       }
 
-      // Only load detail data if not rejected (rejected salons get fresh form)
-      if (salon.status !== "rejected") {
+      // Load detail data for all statuses (including rejected) so form is pre-populated
+      if (salon?.id) {
         try {
           const detail = await getSalonDetail(salon.id);
           setName(detail.name || salon.name || "");
@@ -207,6 +189,28 @@ export default function SalonRegister() {
     return raw || fallback;
   };
 
+  // Format phone number as (123) 456-7890
+  const formatPhoneNumber = (value) => {
+    // Remove all non-digit characters
+    const digits = value.replace(/\D/g, "");
+    
+    // Limit to 10 digits
+    const limitedDigits = digits.slice(0, 10);
+    
+    // Format based on length
+    if (limitedDigits.length === 0) return "";
+    if (limitedDigits.length <= 3) return `(${limitedDigits}`;
+    if (limitedDigits.length <= 6) return `(${limitedDigits.slice(0, 3)}) ${limitedDigits.slice(3)}`;
+    return `(${limitedDigits.slice(0, 3)}) ${limitedDigits.slice(3, 6)}-${limitedDigits.slice(6)}`;
+  };
+
+  const handlePhoneChange = (e) => {
+    const input = e.target.value;
+    // Only allow digits and formatting characters
+    const formatted = formatPhoneNumber(input);
+    setPhone(formatted);
+  };
+
   const validateForm = () => {
     const phoneDigits = phone ? phone.replace(/\D/g, "") : "";
     const emailValid = email ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) : false;
@@ -270,9 +274,17 @@ export default function SalonRegister() {
           setShowForm(true);
           setIsEditing(true);
         } else if (salon.status === "verified") {
-          // Check if setup is complete
-          const setupStatus = await checkSetupStatus(salon.id);
-          if (!setupStatus.isComplete) {
+          // Use setup_complete from backend response directly if available
+          let isSetupComplete = false;
+          if (salon.setup_complete !== undefined && salon.setup_complete !== null) {
+            isSetupComplete = salon.setup_complete;
+          } else {
+            // Fallback: check setup status if not in response
+            const setupStatus = await checkSetupStatus(salon.id);
+            isSetupComplete = setupStatus.isComplete;
+          }
+          
+          if (!isSetupComplete) {
             // Redirect to setup page if not complete
             navigate("/salon-setup");
             return;
@@ -288,42 +300,17 @@ export default function SalonRegister() {
           setStatus("rejected");
           setShowForm(true);
           setIsEditing(true);
-          // Reset form fields for fresh appeal (don't preload old data)
-          setName("");
-          setAddress("");
-          setCity("");
-          setState("");
-          setZip("");
-          setPhone("");
-          setEmail("");
-          setDescription("");
-          setTimezone("America/New_York");
-          setLogoFile(null);
-          setLicenseFile(null);
-          // Fetch rejection reason from status history
-          try {
-            const history = await getSalonStatusHistory(salon.id);
-            const rejectionNotif = history.timeline?.find(n => 
-              n.title === "Salon Denied" || n.message?.includes("Denied")
-            );
-            if (rejectionNotif?.message) {
-              const reasonMatch = rejectionNotif.message.match(/Reason\(s\):\s*(.+)/i);
-              if (reasonMatch) {
-                setRejectionReason(reasonMatch[1].trim());
-              } else {
-                setRejectionReason(rejectionNotif.message);
-              }
-            }
-          } catch (err) {
-            console.error("Failed to fetch rejection reason:", err);
-          }
+          // Use rejection reason directly from salon object
+          setRejectionReason(salon.rejection_reason || "");
+          // Keep form fields populated so owner can edit and resubmit
+          // Don't reset - load existing data
         } else {
           setStatus("not_submitted");
           setShowForm(true);
           setIsEditing(true);
         }
-        // Only load detail data if not rejected (rejected salons get fresh form)
-        if (salon?.id && salon.status !== "rejected") {
+        // Load detail data for all statuses (including rejected) so form is pre-populated
+        if (salon?.id) {
           try {
             const detail = await getSalonDetail(salon.id);
             setName(detail.name || salon.name || "");
@@ -521,7 +508,7 @@ export default function SalonRegister() {
           <div>
             <h2 className="text-2xl font-semibold">Salon Registration</h2>
             <p className="text-sm text-indigo-100 mt-1">
-              Submit your application. An admin must approve before your owner portal unlocks.
+              Submit your application. After admin verification, complete your setup to make your salon visible to customers.
             </p>
           </div>
           {["approved", "pending", "rejected"].includes(status) && (
@@ -668,11 +655,21 @@ export default function SalonRegister() {
                   <Input
                     id="zip"
                     value={zip}
-                    onChange={(e) => setZip(e.target.value)}
+                    onChange={(e) => {
+                      // Only allow digits, limit to 5
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 5);
+                      setZip(digits);
+                    }}
                     placeholder="07102"
                     required
                     disabled={!isEditing}
+                    pattern="[0-9]{5}"
+                    inputMode="numeric"
+                    maxLength={5}
                   />
+                  {zip && zip.length !== 5 && (
+                    <p className="text-xs text-red-600 mt-1">ZIP Code must be exactly 5 digits</p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="timezone">Timezone *</Label>
@@ -693,16 +690,21 @@ export default function SalonRegister() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="phone">Phone (10 digits, digits only) *</Label>
+                <Label htmlFor="phone">Phone *</Label>
                 <Input
                   id="phone"
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="9735551234"
+                  onChange={handlePhoneChange}
+                  placeholder="(973) 555-1234"
                   required={!email}
                   disabled={!isEditing}
+                  maxLength={14}
+                  inputMode="numeric"
                 />
+                {phone && phone.replace(/\D/g, "").length !== 10 && (
+                  <p className="text-xs text-red-600 mt-1">Phone must be 10 digits</p>
+                )}
               </div>
               <div>
                 <Label htmlFor="email">Email *</Label>
@@ -839,28 +841,28 @@ export default function SalonRegister() {
               <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center">1</Badge>
               <div>
                 <p>Submit your application</p>
-                <p className="text-xs text-gray-500">Provide accurate business info.</p>
+                <p className="text-xs text-gray-500">Provide accurate business info and license.</p>
               </div>
             </li>
             <li className="flex gap-3">
               <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center">2</Badge>
               <div>
-                <p>Admin review (1-3 business days)</p>
-                <p className="text-xs text-gray-500">Admins verify your license.</p>
+                <p>Admin verification (1-3 business days)</p>
+                <p className="text-xs text-gray-500">Admins review and verify your license. You'll receive an email when approved.</p>
               </div>
             </li>
             <li className="flex gap-3">
               <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center">3</Badge>
               <div>
-                <p>Approval notification</p>
-                <p className="text-xs text-gray-500">We’ll email you once approved or if updates are needed.</p>
+                <p>Complete your setup</p>
+                <p className="text-xs text-gray-500">After approval, set up your hours, services, and employees with assigned services.</p>
               </div>
             </li>
             <li className="flex gap-3">
               <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center">4</Badge>
               <div>
-                <p>Go live</p>
-                <p className="text-xs text-gray-500">Owner dashboard unlocks; start taking bookings.</p>
+                <p>Your salon goes live</p>
+                <p className="text-xs text-gray-500">Once setup is complete, your salon will appear in customer listings and you can start taking bookings.</p>
               </div>
             </li>
           </ol>

@@ -314,7 +314,7 @@ export default function Loyalty() {
                                 </span>
                               </div>
                               <p className="text-xs text-gray-600 mb-2">{promotion.description}</p>
-                              <div className="flex items-center gap-3 text-xs text-gray-500">
+                              <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
                                 <div className="flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
                                   <span>
@@ -323,6 +323,15 @@ export default function Loyalty() {
                                 </div>
                                 {promotion.min_purchase_amount > 0 && (
                                   <span>Min: ${promotion.min_purchase_amount}</span>
+                                )}
+                                {promotion.applies_to && (
+                                  <span className="text-indigo-600 font-medium">
+                                    {promotion.applies_to === "both" 
+                                      ? "Applies to: Products & Appointments"
+                                      : promotion.applies_to === "products"
+                                      ? "Applies to: Products Only"
+                                      : "Applies to: Appointments Only"}
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -458,7 +467,7 @@ export default function Loyalty() {
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mb-3">{promotion.description}</p>
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
                           <span>
@@ -467,6 +476,15 @@ export default function Loyalty() {
                         </div>
                         {promotion.min_purchase_amount > 0 && (
                           <span>Min purchase: ${promotion.min_purchase_amount}</span>
+                        )}
+                        {promotion.applies_to && (
+                          <span className="text-indigo-600 font-medium">
+                            {promotion.applies_to === "both" 
+                              ? "Applies to: Products & Appointments"
+                              : promotion.applies_to === "products"
+                              ? "Applies to: Products Only"
+                              : "Applies to: Appointments Only"}
+                          </span>
                         )}
                       </div>
                     </div>

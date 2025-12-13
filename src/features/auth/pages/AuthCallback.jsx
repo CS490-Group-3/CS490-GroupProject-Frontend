@@ -33,10 +33,25 @@ export default function AuthCallback() {
         return;
       }
 
-      // Handle email confirmation - check multiple parameter locations
-      const hasAccessToken = accessToken || hashAccessToken;
+      // Handle password recovery FIRST (before email confirmation)
+      // Password reset links have type=recovery
       const confirmationType = type || hashType;
+      const hasAccessToken = accessToken || hashAccessToken;
       
+      if (confirmationType === "recovery" && (token || hashAccessToken)) {
+        setStatus("success");
+        setMessage("Redirecting to reset password...");
+        
+        // Use token from URL or hash
+        const resetToken = token || hashAccessToken;
+        setTimeout(() => {
+          navigate(`/auth/reset-password?token=${resetToken}`);
+        }, 1500);
+        return;
+      }
+
+      // Handle email confirmation - check multiple parameter locations
+      // Only if it's NOT a password recovery
       if (confirmationType === "signup" || confirmationType === "email" || hasAccessToken) {
         setStatus("success");
         setMessage("Email confirmed! Redirecting to sign in...");
@@ -47,19 +62,6 @@ export default function AuthCallback() {
             state: { message: "Email confirmed! You can now sign in." }
           });
         }, 2000);
-        return;
-      }
-
-      // Handle password recovery
-      if (confirmationType === "recovery" && (token || hashAccessToken)) {
-        setStatus("success");
-        setMessage("Redirecting to reset password...");
-        
-        // Use token from URL or hash
-        const resetToken = token || hashAccessToken;
-        setTimeout(() => {
-          navigate(`/auth/reset-password?token=${resetToken}`);
-        }, 1500);
         return;
       }
 

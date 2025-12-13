@@ -12,9 +12,19 @@ export async function fetchAppointments(params = {}) {
 }
 
 export async function patchAppointment(appointmentId, updates) {
-  return api(`/appointments/${appointmentId}`, {
+  return api(`/appointments`, {
     method: "PATCH",
-    body: JSON.stringify(updates),
+    body: JSON.stringify({
+      id: appointmentId,
+      ...updates
+    }),
+  });
+}
+
+export async function cancelAppointment(appointmentId, reason) {
+  return api(`/appointments/${appointmentId}/cancel`, {
+    method: "PATCH",
+    body: JSON.stringify({ reason }),
   });
 }
 
@@ -61,7 +71,7 @@ export async function updateAvailability(data) {
 }
 
 export async function notifyRunningLate(appointmentId) {
-  return api(`/appointments/${appointmentId}/notify-late`, {
+  return api(`/appointments/${appointmentId}/running-late`, {
     method: "POST",
   });
 }

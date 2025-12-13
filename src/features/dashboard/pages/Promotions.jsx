@@ -27,6 +27,7 @@ export default function Promotions() {
     min_visits: "",
     min_loyalty_points: "",
     targeting_logic: "and",
+    applies_to: "both",
   });
 
   useEffect(() => {
@@ -77,10 +78,24 @@ export default function Promotions() {
       min_visits: "",
       min_loyalty_points: "",
       targeting_logic: "and",
+      applies_to: "both",
     });
     setEditingPromotion(null);
     setShowForm(false);
     setError("");
+  };
+
+  // Helper to convert UTC ISO string to local datetime-local format (YYYY-MM-DDTHH:mm)
+  const utcToLocalDatetime = (utcString) => {
+    if (!utcString) return "";
+    const date = new Date(utcString);
+    // Get local date components
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   const handleEdit = (promotion) => {
@@ -90,13 +105,14 @@ export default function Promotions() {
       description: promotion.description || "",
       discount_type: promotion.discount_type || "percentage",
       discount_value: promotion.discount_value?.toString() || "",
-      valid_from: promotion.valid_from ? new Date(promotion.valid_from).toISOString().slice(0, 16) : "",
-      valid_until: promotion.valid_until ? new Date(promotion.valid_until).toISOString().slice(0, 16) : "",
+      valid_from: utcToLocalDatetime(promotion.valid_from),
+      valid_until: utcToLocalDatetime(promotion.valid_until),
       min_purchase_amount: promotion.min_purchase_amount?.toString() || "",
       target_audience: promotion.target_audience || "existing_customers",
       min_visits: promotion.min_visits ? promotion.min_visits.toString() : "",
       min_loyalty_points: promotion.min_loyalty_points ? promotion.min_loyalty_points.toString() : "",
       targeting_logic: promotion.targeting_logic || "and",
+      applies_to: promotion.applies_to || "both",
     });
     setShowForm(true);
   };
@@ -152,6 +168,7 @@ export default function Promotions() {
         valid_from: new Date(formData.valid_from).toISOString(),
         valid_until: new Date(formData.valid_until).toISOString(),
         target_audience: formData.target_audience,
+        applies_to: formData.applies_to,
       };
       
       if (formData.min_purchase_amount) {
@@ -377,6 +394,24 @@ export default function Promotions() {
                   : formData.target_audience === "all_users"
                   ? "All users on the platform (excluding admins and salon owners)"
                   : "Customize targeting based on visit count and/or loyalty points"}
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="applies_to">Applies To *</Label>
+              <select
+                id="applies_to"
+                value={formData.applies_to}
+                onChange={(e) => setFormData({ ...formData, applies_to: e.target.value })}
+                className="w-full px-3 py-2 border rounded-md"
+                required
+              >
+                <option value="both">Both Products and Appointments</option>
+                <option value="products">Products Only</option>
+                <option value="appointments">Appointments Only</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Choose whether this promotion applies to product purchases, appointment bookings, or both.
               </p>
             </div>
 

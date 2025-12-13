@@ -280,23 +280,25 @@ function Step3DateTime({ dateISO, onDateISO, slots, slot, onSelect, error }) {
         <div className="flex-1">
           <div className="text-sm text-gray-600 mb-2">Available Time Slots</div>
           {error && <div className="text-sm text-rose-600 mb-2">{error}</div>}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {slots.map((s) => (
-              <button
-                key={s.start_at}
-                onClick={() => onSelect(s)}
-                className={`rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 ${
-                  slot?.start_at === s.start_at ? "ring-2 ring-violet-600 border-violet-600" : ""
-                }`}
-              >
-                {s.label || formatTimeInTz(s.start_at, s.timezone || tz)}
-              </button>
-            ))}
-            {slots.length === 0 && (
-              <div className="col-span-full text-sm text-gray-500">
-                No open slots for this day. Try another date.
-              </div>
-            )}
+          <div className="max-h-[400px] overflow-y-auto pr-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {slots.map((s) => (
+                <button
+                  key={s.start_at}
+                  onClick={() => onSelect(s)}
+                  className={`rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 ${
+                    slot?.start_at === s.start_at ? "ring-2 ring-violet-600 border-violet-600" : ""
+                  }`}
+                >
+                  {s.label || formatTimeInTz(s.start_at, s.timezone || tz)}
+                </button>
+              ))}
+              {slots.length === 0 && (
+                <div className="col-span-full text-sm text-gray-500">
+                  No open slots for this day. Try another date.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

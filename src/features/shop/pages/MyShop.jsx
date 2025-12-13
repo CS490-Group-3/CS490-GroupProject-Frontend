@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../shared/api/client.js";
-import { Plus, Edit2, X, Save, Trash2, Loader2, Upload, Image as ImageIcon, Calendar, Tag, Package } from "lucide-react";
+import { Plus, Edit2, X, Save, Trash2, Loader2, Upload, Image as ImageIcon, Package, RotateCcw } from "lucide-react";
 import { Button } from "../../../shared/ui/button";
 import { Input } from "../../../shared/ui/input";
 import { Label } from "../../../shared/ui/label";
@@ -83,21 +83,6 @@ export default function MyShop() {
   // Categories state
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
-  
-  // Promotions state
-  const [promotions, setPromotions] = useState([]);
-  const [showPromotionForm, setShowPromotionForm] = useState(false);
-  const [newPromotion, setNewPromotion] = useState({
-    title: "",
-    description: "",
-    discount_type: "percentage",
-    discount_value: "",
-    valid_from: "",
-    valid_until: "",
-    min_purchase_amount: "",
-    target_audience: "existing_customers",
-  });
-  const [savingPromotion, setSavingPromotion] = useState(false);
 
   useEffect(() => {
     loadSalonData();
@@ -115,11 +100,10 @@ export default function MyShop() {
         
         // Load from localStorage first for instant display
         const cachedProducts = loadProductsFromStorage(currentSalonId);
-        // Filter out inactive products from cache
-        const activeCachedProducts = cachedProducts.filter(p => p.is_active !== false);
-        if (activeCachedProducts.length > 0) {
+        // Don't filter - show all products including inactive for owners
+        if (cachedProducts.length > 0) {
           // Use cached products directly - ProductImage component will refresh filepaths when displaying
-          setProducts(activeCachedProducts);
+          setProducts(cachedProducts);
         }
         
         // Then try to load from server (will update localStorage if successful)
@@ -161,17 +145,18 @@ export default function MyShop() {
   const loadProducts = async (salonId) => {
     try {
       console.log("Loading products for salon:", salonId);
-      const res = await shopApi.listProducts(salonId);
+      // Include inactive products for salon owners
+      const res = await shopApi.listProducts(salonId, [], true);
       console.log("Products response:", res);
       const productsList = res.products || [];
       console.log("Products list:", productsList);
       
-      // Filter out inactive products (is_active: false)
-      const activeProducts = productsList.filter(p => p.is_active !== false);
+      // Don't filter - show all products including inactive for owners
+      const activeProducts = productsList;
       
       // IMPORTANT: Save raw products with filepaths to localStorage (never signed URLs)
       // The backend returns filepaths in image_url - store them as-is
-      // Only save active products to localStorage
+      // Save all products (including inactive) for owners
       saveProductsToStorage(salonId, activeProducts);
       
       // For display, we'll use ProductImage component which refreshes filepaths automatically
@@ -433,6 +418,40 @@ export default function MyShop() {
     }
   };
 
+  const handleRestoreProduct = async (productId) => {
+    if (!salonId) return;
+    
+    setSavingProduct(true);
+    try {
+      await shopApi.updateProduct(productId, { is_active: true });
+      
+      // Update product in state
+      setProducts(prev => prev.map(p => 
+        p.id === productId ? { ...p, is_active: true } : p
+      ));
+      
+      // Reload products from server to ensure sync
+      await loadProducts(salonId);
+      
+      alert("Product restored successfully!");
+    } catch (error) {
+      console.error("Error restoring product:", error);
+      let errorMessage = "Unknown error";
+      if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage = typeof error.error === "string" ? error.error : JSON.stringify(error.error);
+      } else if (error) {
+        errorMessage = JSON.stringify(error);
+      }
+      alert("Failed to restore product: " + errorMessage);
+    } finally {
+      setSavingProduct(false);
+    }
+  };
+
   const handleUpdateStock = async (productId, newStock) => {
     if (!salonId) return;
     const stock = parseInt(newStock);
@@ -462,88 +481,6 @@ export default function MyShop() {
     }
   };
 
-  const handleAddPromotion = async (e) => {
-    e.preventDefault();
-    if (!salonId) return;
-    
-    const discount = parseFloat(newPromotion.discount_value);
-    if (isNaN(discount) || discount < 0 || discount > 100) {
-      alert("Please enter a valid discount percentage (0-100)");
-      return;
-    }
-    
-    if (!newPromotion.valid_from || !newPromotion.valid_until) {
-      alert("Please select start and end dates");
-      return;
-    }
-    
-    if (new Date(newPromotion.valid_from) >= new Date(newPromotion.valid_until)) {
-      alert("End date must be after start date");
-      return;
-    }
-    
-    if (!newPromotion.title || !newPromotion.description) {
-      alert("Please provide a title and description for the promotion");
-      return;
-    }
-    
-    setSavingPromotion(true);
-    try {
-      // Convert dates to ISO strings
-      const promotionData = {
-        title: newPromotion.title,
-        description: newPromotion.description,
-        discount_type: newPromotion.discount_type,
-        discount_value: discount,
-        valid_from: new Date(newPromotion.valid_from).toISOString(),
-        valid_until: new Date(newPromotion.valid_until).toISOString(),
-        target_audience: newPromotion.target_audience,
-      };
-      
-      if (newPromotion.min_purchase_amount) {
-        promotionData.min_purchase_amount = parseFloat(newPromotion.min_purchase_amount);
-      }
-      
-      const result = await shopApi.createPromotion(salonId, promotionData);
-      
-      // Reload promotions (when endpoint is available)
-      // For now, add to local state
-      const createdPromotion = {
-        id: result.offer_id,
-        ...newPromotion,
-        discount_value: discount,
-      };
-      setPromotions([...promotions, createdPromotion]);
-      
-      setNewPromotion({
-        title: "",
-        description: "",
-        discount_type: "percentage",
-        discount_value: "",
-        valid_from: "",
-        valid_until: "",
-        min_purchase_amount: "",
-        target_audience: "existing_customers",
-      });
-      setShowPromotionForm(false);
-      alert("Promotion created successfully!");
-    } catch (error) {
-      console.error("Error creating promotion:", error);
-      let errorMessage = "Unknown error";
-      if (typeof error === "string") {
-        errorMessage = error;
-      } else if (error?.message) {
-        errorMessage = error.message;
-      } else if (error?.error) {
-        errorMessage = typeof error.error === "string" ? error.error : JSON.stringify(error.error);
-      } else if (error) {
-        errorMessage = JSON.stringify(error);
-      }
-      alert("Failed to create promotion: " + errorMessage);
-    } finally {
-      setSavingPromotion(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -691,13 +628,16 @@ export default function MyShop() {
           </form>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {products.length === 0 && !showProductForm && (
-            <div className="col-span-full rounded-xl border bg-gray-50 text-gray-600 p-4 text-sm text-center">
-              No products yet. Add your first product above.
-            </div>
-          )}
-          {products.filter(product => product.is_active !== false).map((product) => (
+        {/* Active Products */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Active Products</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {products.filter(p => p.is_active !== false).length === 0 && !showProductForm && (
+              <div className="col-span-full rounded-xl border bg-gray-50 text-gray-600 p-4 text-sm text-center">
+                No active products yet. Add your first product above.
+              </div>
+            )}
+            {products.filter(p => p.is_active !== false).map((product) => (
             <div key={product.id} className="border rounded-xl p-4 bg-white">
               {editingProduct?.id === product.id ? (
                 <div className="space-y-3">
@@ -849,187 +789,182 @@ export default function MyShop() {
                       <Package className="h-4 w-4 text-gray-400" />
                     </div>
                   </div>
-                  {!product.is_active && (
-                    <div className="mt-2 text-xs text-amber-600">Inactive</div>
-                  )}
                 </>
               )}
             </div>
           ))}
-        </div>
-      </div>
-
-      {/* Promotions Section */}
-      <div className="bg-white border rounded-2xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Promotions & Discounts</h2>
-          {!showPromotionForm && (
-            <Button onClick={() => setShowPromotionForm(true)} size="sm">
-              <Tag className="h-4 w-4 mr-2" />
-              Schedule Promotion
-            </Button>
-          )}
-        </div>
-
-        {showPromotionForm && (
-          <form onSubmit={handleAddPromotion} className="mb-4 p-4 border rounded-lg space-y-4">
-            <div>
-              <Label>Promotion Title *</Label>
-              <Input
-                value={newPromotion.title}
-                onChange={(e) => setNewPromotion({ ...newPromotion, title: e.target.value })}
-                placeholder="e.g., Holiday Blowout Sale"
-                required
-              />
-            </div>
-            <div>
-              <Label>Description *</Label>
-              <Textarea
-                value={newPromotion.description}
-                onChange={(e) => setNewPromotion({ ...newPromotion, description: e.target.value })}
-                rows={3}
-                placeholder="e.g., 20% off all services this weekend!"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Discount (%) *</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={newPromotion.discount_value}
-                  onChange={(e) => setNewPromotion({ ...newPromotion, discount_value: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label>Min Purchase Amount ($)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={newPromotion.min_purchase_amount}
-                  onChange={(e) => setNewPromotion({ ...newPromotion, min_purchase_amount: e.target.value })}
-                  placeholder="Optional"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Start Date & Time *</Label>
-                <Input
-                  type="datetime-local"
-                  value={newPromotion.valid_from}
-                  onChange={(e) => setNewPromotion({ ...newPromotion, valid_from: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label>End Date & Time *</Label>
-                <Input
-                  type="datetime-local"
-                  value={newPromotion.valid_until}
-                  onChange={(e) => setNewPromotion({ ...newPromotion, valid_until: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <Label>Target Audience *</Label>
-              <select
-                value={newPromotion.target_audience}
-                onChange={(e) => setNewPromotion({ ...newPromotion, target_audience: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md"
-                required
-              >
-                <option value="existing_customers">Existing Customers</option>
-                <option value="all_users">All Users</option>
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <Button type="submit" disabled={savingPromotion}>
-                {savingPromotion ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Calendar className="h-4 w-4 mr-2" />}
-                Create Promotion
-              </Button>
-              <Button type="button" variant="outline" onClick={() => {
-                setShowPromotionForm(false);
-                setNewPromotion({
-                  title: "",
-                  description: "",
-                  discount_type: "percentage",
-                  discount_value: "",
-                  valid_from: "",
-                  valid_until: "",
-                  min_purchase_amount: "",
-                  target_audience: "existing_customers",
-                });
-              }}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        )}
-
-        {promotions.length === 0 && !showPromotionForm ? (
-          <div className="text-center py-8 text-gray-600">
-            <Tag className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-            <p>No promotions scheduled yet.</p>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {promotions.map((promo) => {
-              const startDate = new Date(promo.valid_from);
-              const endDate = new Date(promo.valid_until);
-              const now = new Date();
-              const isActive = now >= startDate && now <= endDate;
-              const isUpcoming = now < startDate;
-              
-              return (
-                <div key={promo.id} className="border rounded-lg p-4 bg-gray-50">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-medium">{promo.title || "Promotion"}</h4>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          isActive ? "bg-green-100 text-green-800" :
-                          isUpcoming ? "bg-blue-100 text-blue-800" :
-                          "bg-gray-100 text-gray-800"
-                        }`}>
-                          {isActive ? "Active" : isUpcoming ? "Upcoming" : "Expired"}
-                        </span>
+        </div>
+
+        {/* Inactive Products */}
+        {products.filter(p => p.is_active === false).length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Inactive Products</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {products.filter(p => p.is_active === false).map((product) => (
+                <div key={product.id} className="border rounded-xl p-4 bg-white opacity-75">
+                  {editingProduct?.id === product.id ? (
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Product Name</Label>
+                        <Input
+                          value={editingProduct.name}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                        />
                       </div>
-                      <p className="text-sm text-gray-600 mb-2">
-                        {promo.discount_value}% off
-                        {promo.min_purchase_amount && ` (min $${Number(promo.min_purchase_amount).toFixed(2)})`}
-                      </p>
-                      {promo.description && (
-                        <p className="text-xs text-gray-500 mb-2">{promo.description}</p>
-                      )}
-                      <div className="text-xs text-gray-500 mb-1">
-                        <Calendar className="h-3 w-3 inline mr-1" />
-                        {startDate.toLocaleString()} - {endDate.toLocaleString()}
+                      <div>
+                        <Label>Description</Label>
+                        <Textarea
+                          value={editingProduct.description || ""}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                          rows={2}
+                        />
                       </div>
-                      <div className="text-xs text-gray-500">
-                        Target: {promo.target_audience === "existing_customers" ? "Existing Customers" : "All Users"}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label>Price ($)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={editingProduct.price}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, price: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label>Stock</Label>
+                          <Input
+                            type="number"
+                            value={editingProduct.stock_quantity}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, stock_quantity: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Category</Label>
+                        <select
+                          value={editingProduct.category_id || ""}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, category_id: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-md"
+                        >
+                          <option value="">No category</option>
+                          {categories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label>Product Image</Label>
+                        {productImagePreview && (
+                          <img src={productImagePreview} alt="Preview" className="h-24 w-24 object-cover rounded-lg border mb-2" />
+                        )}
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editingProduct.is_active}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, is_active: e.target.checked })}
+                          className="rounded"
+                        />
+                        <Label className="text-sm">Active</Label>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button onClick={() => handleUpdateProduct(product.id)} size="sm" disabled={savingProduct}>
+                          {savingProduct ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        </Button>
+                        <Button onClick={() => {
+                          setEditingProduct(null);
+                          setProductImageFile(null);
+                          setProductImagePreview(null);
+                        }} variant="outline" size="sm">
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <Button
-                      onClick={() => setPromotions(promotions.filter(p => p.id !== promo.id))}
-                      variant="ghost"
-                      size="sm"
-                    >
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </div>
+                  ) : (
+                    <>
+                      <ProductImage
+                        imageUrl={product.image_url}
+                        alt={product.name}
+                        className="w-full h-48 object-cover rounded-lg mb-3"
+                      />
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <h3 className="font-medium text-gray-900">{product.name}</h3>
+                          {product.category_id && categories.find(c => c.id === product.category_id) && (
+                            <p className="text-xs text-indigo-600 mt-1">
+                              {categories.find(c => c.id === product.category_id).name}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            onClick={() => setEditingProduct({ ...product })}
+                            variant="ghost"
+                            size="sm"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            onClick={() => handleRestoreProduct(product.id)}
+                            variant="ghost"
+                            size="sm"
+                            disabled={savingProduct}
+                            title="Restore product to active"
+                          >
+                            <RotateCcw className="h-4 w-4 text-green-600" />
+                          </Button>
+                        </div>
+                      </div>
+                      {product.description && (
+                        <p className="text-sm text-gray-600 mb-2">{product.description}</p>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-lg font-semibold text-gray-900">${Number(product.price).toFixed(2)}</div>
+                          <div className="text-xs text-gray-500">
+                            Stock: <span className={product.stock_quantity > 0 ? "text-green-600" : "text-red-600"}>
+                              {product.stock_quantity}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            value={product.stock_quantity}
+                            onChange={(e) => {
+                              const newStock = e.target.value;
+                              if (newStock !== String(product.stock_quantity)) {
+                                handleUpdateStock(product.id, newStock);
+                              }
+                            }}
+                            className="w-20 h-8 text-sm"
+                            onBlur={(e) => {
+                              if (e.target.value !== String(product.stock_quantity)) {
+                                handleUpdateStock(product.id, e.target.value);
+                              }
+                            }}
+                          />
+                          <Package className="h-4 w-4 text-gray-400" />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-amber-600 font-medium">Inactive</div>
+                    </>
+                  )}
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         )}
       </div>
+
     </div>
   );
 }

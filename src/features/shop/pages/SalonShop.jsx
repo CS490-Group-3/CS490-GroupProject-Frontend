@@ -21,7 +21,8 @@ export default function SalonShop() {
   const [showCartPanel, setShowCartPanel] = useState(false);
   const [quantityInput, setQuantityInput] = useState({});
   const [imageMap, setImageMap] = useState({});
-  const [pendingQuantities, setPendingQuantities] = useState({}); // Local state for quantity changes
+  const [pendingQuantities, setPendingQuantities] = useState({}); // Local state for quantity changes in cart panel
+  const [productCardPendingQuantities, setProductCardPendingQuantities] = useState({}); // Local state for quantity changes in product cards
 
   useEffect(() => {
     if (salonId) {
@@ -117,10 +118,18 @@ export default function SalonShop() {
       const items = Array.isArray(res.cart?.items) ? res.cart.items : [];
       setCartItems(items);
     } catch (err) {
-      console.error("Error loading cart:", err);
-      // If cart doesn't exist, that's okay - it will be created on first add
-      setCart(null);
-      setCartItems([]);
+      // Silently handle "no cart found" - cart will be created automatically on first add
+      const errorMessage = err?.error || err?.message || String(err);
+      if (errorMessage.includes("No active cart found") || errorMessage.includes("cart not found")) {
+        // This is expected - cart will be created when user adds first item
+        setCart(null);
+        setCartItems([]);
+      } else {
+        // Log other errors (actual problems)
+        console.error("Error loading cart:", err);
+        setCart(null);
+        setCartItems([]);
+      }
     } finally {
       setCartLoading(false);
     }
@@ -240,6 +249,8 @@ export default function SalonShop() {
             const stock = product.stock_quantity;
             const maxQty = typeof stock === "number" && stock !== null ? stock : 9999;
             const selectedQty = quantityInput[product.id] ?? 1;
+            const pendingQty = productCardPendingQuantities[product.id] ?? (cartItem?.quantity || 1);
+            const hasPendingChanges = inCart && pendingQty !== cartItem.quantity;
 
             return (
               <div key={product.id} className="bg-white border rounded-xl overflow-hidden hover:shadow-lg transition-shadow">
@@ -292,29 +303,58 @@ export default function SalonShop() {
                   </div>
 
                   {inCart && (
-                    <div className="flex items-center gap-2 pt-2">
-                      <button
-                        onClick={() => updateQuantity(cartItem.id, Math.max(1, cartItem.quantity - 1))}
-                        className="p-1 rounded border hover:bg-gray-50"
-                        disabled={cartLoading}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                      <span className="flex-1 text-center font-medium">{cartItem.quantity}</span>
-                      <button
-                        onClick={() => updateQuantity(cartItem.id, Math.min(maxQty, cartItem.quantity + 1))}
-                        className="p-1 rounded border hover:bg-gray-50"
-                        disabled={cartLoading || (stock !== null && stock !== undefined && cartItem.quantity >= stock)}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => removeFromCart(cartItem.id)}
-                        className="p-1 rounded border hover:bg-red-50 text-red-600"
-                        disabled={cartLoading}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setProductCardPendingQuantities(prev => ({
+                            ...prev,
+                            [product.id]: Math.max(1, (prev[product.id] || cartItem.quantity) - 1)
+                          }))}
+                          className="p-1 rounded border hover:bg-gray-50"
+                          disabled={cartLoading}
+                        >
+                          <Minus className="h-4 w-4" />
+                        </button>
+                        <span className="flex-1 text-center font-medium">{pendingQty}</span>
+                        <button
+                          onClick={() => setProductCardPendingQuantities(prev => ({
+                            ...prev,
+                            [product.id]: Math.min(maxQty, (prev[product.id] || cartItem.quantity) + 1)
+                          }))}
+                          className="p-1 rounded border hover:bg-gray-50"
+                          disabled={cartLoading || (stock !== null && stock !== undefined && pendingQty >= stock)}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                        {hasPendingChanges && (
+                          <button
+                            onClick={async () => {
+                              await updateQuantity(cartItem.id, pendingQty);
+                              setProductCardPendingQuantities(prev => {
+                                const newPending = { ...prev };
+                                delete newPending[product.id];
+                                return newPending;
+                              });
+                            }}
+                            className="px-2 py-1 text-xs bg-black text-white rounded hover:opacity-90"
+                            disabled={cartLoading}
+                          >
+                            Update
+                          </button>
+                        )}
+                        <button
+                          onClick={() => removeFromCart(cartItem.id)}
+                          className="p-1 rounded border hover:bg-red-50 text-red-600"
+                          disabled={cartLoading}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      {hasPendingChanges && (
+                        <p className="text-xs text-gray-500 text-center">
+                          Current: {cartItem.quantity} → New: {pendingQty}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -550,9 +590,13 @@ export default function SalonShop() {
           cart={cart}
           cartItems={cartItems}
           onClose={() => setShowCheckout(false)}
-          onSuccess={() => {
+          onSuccess={async () => {
             setShowCheckout(false);
-            loadCart();
+            // Reload cart and products to reflect updated stock quantities
+            await Promise.all([
+              loadCart(),
+              loadShopData()
+            ]);
             alert("Order placed successfully!");
           }}
         />
