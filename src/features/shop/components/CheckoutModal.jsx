@@ -77,7 +77,7 @@ export default function CheckoutModal({ cart, cartItems, onClose, onSuccess }) {
           }),
           getCustomerPoints().catch(() => []),
           cart?.salon_id ? getLoyaltyRewards(cart.salon_id).catch(() => null) : Promise.resolve(null),
-          cart?.salon_id && cart?.total_amount ? getActivePromotions(cart.salon_id, cart.total_amount).catch(() => ({ promotions: [] })) : Promise.resolve({ promotions: [] })
+          cart?.salon_id && cart?.total_amount ? getActivePromotions(cart.salon_id, cart.total_amount, "products").catch(() => ({ promotions: [] })) : Promise.resolve({ promotions: [] })
         ]);
         
         if (!alive) return;

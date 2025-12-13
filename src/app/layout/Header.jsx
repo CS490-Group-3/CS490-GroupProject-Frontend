@@ -53,15 +53,23 @@ export default function Header() {
         const isVerified = salon?.status === "verified";
         setOwnerHasVerifiedSalon(isVerified);
         
-        // If verified, check setup completion
+        // If verified, use setup_complete from backend response directly
         if (isVerified && salon?.id) {
-          try {
-            const setupStatus = await checkSetupStatus(salon.id);
+          if (salon.setup_complete !== undefined && salon.setup_complete !== null) {
+            // Backend provides setup_complete - use it directly (no async check needed)
             if (!cancelled) {
-              setOwnerSetupComplete(setupStatus.isComplete);
+              setOwnerSetupComplete(salon.setup_complete);
             }
-          } catch (err) {
-            if (!cancelled) setOwnerSetupComplete(false);
+          } else {
+            // Fallback: check setup status if not in response (shouldn't happen with updated backend)
+            try {
+              const setupStatus = await checkSetupStatus(salon.id);
+              if (!cancelled) {
+                setOwnerSetupComplete(setupStatus.isComplete);
+              }
+            } catch (err) {
+              if (!cancelled) setOwnerSetupComplete(false);
+            }
           }
         } else {
           setOwnerSetupComplete(null);

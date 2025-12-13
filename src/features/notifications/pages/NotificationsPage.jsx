@@ -87,10 +87,32 @@ export default function NotificationsPage() {
   };
 
   useEffect(() => {
+    if (!user) return;
+    
     loadNotifications();
     // Refresh every 30 seconds
     const interval = setInterval(loadNotifications, 30000);
-    return () => clearInterval(interval);
+    
+    // Refresh when page becomes visible (user switches back to tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadNotifications();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    // Refresh when window gains focus
+    const handleFocus = () => {
+      loadNotifications();
+    };
+    window.addEventListener("focus", handleFocus);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Filter notifications

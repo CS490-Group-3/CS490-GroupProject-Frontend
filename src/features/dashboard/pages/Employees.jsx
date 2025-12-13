@@ -300,16 +300,51 @@ export default function Employees() {
       }));
       
       // Initialize editing state with salon hours as defaults
+      // CRITICAL: Always use current salon hours as the source of truth
+      // If barber availability times don't match salon hours, reset to salon hours
       const editingMap = {};
       DAYS.forEach(day => {
         const existing = availabilityMap[day.value];
         const salonHour = salonHours.find(h => h.day_of_week === day.value);
-        editingMap[day.value] = existing || {
-          day_of_week: day.value,
-          is_closed: salonHour?.is_closed || (day.value < 1 || day.value > 5),
-          start_time: existing?.start_time || (salonHour?.open_time?.substring(0, 5) || "09:00"),
-          end_time: existing?.end_time || (salonHour?.close_time?.substring(0, 5) || "17:00"),
-        };
+        
+        // Determine if salon is closed for this day
+        const salonIsClosed = salonHour?.is_closed || false;
+        
+        if (existing) {
+          // Convert is_active from database to is_closed for frontend
+          const barberIsAvailable = existing.is_active === true;
+          
+          // If barber is unavailable (is_active: false), keep them unavailable
+          // If barber is available but salon is closed, mark barber as unavailable
+          // If barber is available and salon is open, use salon hours (not old DB times)
+          if (!barberIsAvailable || salonIsClosed) {
+            // Barber is unavailable or salon is closed
+            editingMap[day.value] = {
+              ...existing,
+              is_closed: true, // Barber unavailable
+              start_time: salonHour?.open_time?.substring(0, 5) || "09:00", // Show salon hours for reference
+              end_time: salonHour?.close_time?.substring(0, 5) || "17:00",
+            };
+          } else {
+            // Barber is available and salon is open
+            // ALWAYS use current salon hours, not old database times
+            // This ensures barber availability matches current salon hours
+            editingMap[day.value] = {
+              ...existing,
+              is_closed: false, // Barber available
+              start_time: salonHour?.open_time?.substring(0, 5) || "09:00", // Use salon hours
+              end_time: salonHour?.close_time?.substring(0, 5) || "17:00", // Use salon hours
+            };
+          }
+        } else {
+          // No existing entry - use salon hours as default
+          editingMap[day.value] = {
+            day_of_week: day.value,
+            is_closed: salonIsClosed || (day.value < 1 || day.value > 5),
+            start_time: salonHour?.open_time?.substring(0, 5) || "09:00",
+            end_time: salonHour?.close_time?.substring(0, 5) || "17:00",
+          };
+        }
       });
       setEditingAvailability(prev => ({
         ...prev,
@@ -327,13 +362,23 @@ export default function Employees() {
       const availabilityData = editingAvailability[barberId];
       if (!availabilityData) return;
       
+      // Helper to normalize time format (HH:MM -> HH:MM:SS)
+      const normalizeTime = (timeStr) => {
+        if (!timeStr) return "00:00:00";
+        if (timeStr.length === 5 && timeStr.includes(":")) {
+          // HH:MM format - add :00
+          return `${timeStr}:00`;
+        }
+        return timeStr; // Already HH:MM:SS or invalid
+      };
+      
       // Convert to array format - only include open days
       const availabilityArray = Object.values(availabilityData)
         .filter(av => !av.is_closed)
         .map(av => ({
           day_of_week: av.day_of_week,
-          start_time: av.start_time,
-          end_time: av.end_time,
+          start_time: normalizeTime(av.start_time),
+          end_time: normalizeTime(av.end_time),
           is_active: true,
         }));
       
@@ -350,19 +395,20 @@ export default function Employees() {
           const existingAv = existing[av.day_of_week];
           if (existingAv) {
             // Update existing entry
+            // For closed days, use 00:00:00 times and is_active=false
             updateArray.push({
               id: existingAv.id,
               day_of_week: av.day_of_week,
-              start_time: av.is_closed ? null : av.start_time,
-              end_time: av.is_closed ? null : av.end_time,
+              start_time: av.is_closed ? "00:00:00" : normalizeTime(av.start_time),
+              end_time: av.is_closed ? "00:00:00" : normalizeTime(av.end_time),
               is_active: !av.is_closed,
             });
           } else if (!av.is_closed) {
             // New entry to create
             newDays.push({
               day_of_week: av.day_of_week,
-              start_time: av.start_time,
-              end_time: av.end_time,
+              start_time: normalizeTime(av.start_time),
+              end_time: normalizeTime(av.end_time),
               is_active: true,
             });
           }
@@ -386,7 +432,18 @@ export default function Employees() {
       setSelectedBarberForAvailability(null);
       alert("Availability updated successfully!");
     } catch (error) {
-      alert("Failed to update availability: " + (error.message || "Unknown error"));
+      // Extract user-friendly error message from response
+      let errorMessage = "Failed to update availability";
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      // Remove any technical database error details
+      if (errorMessage.includes("violates check constraint") || errorMessage.includes("23514")) {
+        errorMessage = "Invalid availability hours. Please ensure barber hours are within salon hours.";
+      }
+      alert(errorMessage);
     } finally {
       setSavingAvailability(false);
     }

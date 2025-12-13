@@ -9,6 +9,7 @@ import {
 import {
   fetchAppointments,
   patchAppointment,
+  cancelAppointment,
   fetchUnavailability,
   createUnavailability,
   deleteUnavailability,
@@ -195,6 +196,7 @@ export default function ProviderDashboard() {
   const [weeklyAvailability, setWeeklyAvailability] = useState([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [notifyingLate, setNotifyingLate] = useState(null);
+  const [notifiedAppointments, setNotifiedAppointments] = useState(new Set());
 
   // Check if barber is in a salon before loading any data
   useEffect(() => {
@@ -599,11 +601,11 @@ export default function ProviderDashboard() {
                     {!isPastAppointment(appointment) && (
                       <button
                         onClick={() => handleNotifyRunningLate(appointment.id)}
-                        disabled={notifyingLate === appointment.id || savingEdit}
+                        disabled={notifyingLate === appointment.id || savingEdit || notifiedAppointments.has(appointment.id)}
                         className="px-3 py-1.5 bg-amber-500 text-white rounded text-xs font-medium hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
-                        title="Notify customer that you're running late"
+                        title={notifiedAppointments.has(appointment.id) ? "Customer already notified" : "Notify customer that you're running late"}
                       >
-                        {notifyingLate === appointment.id ? "Sending..." : "Notify: Running Late"}
+                        {notifyingLate === appointment.id ? "Sending..." : notifiedAppointments.has(appointment.id) ? "Notified" : "Notify: Running Late"}
                       </button>
                     )}
                     <button
@@ -748,10 +750,13 @@ export default function ProviderDashboard() {
 
   const handleNotifyRunningLate = async (appointmentId) => {
     if (!appointmentId) return;
+    if (notifiedAppointments.has(appointmentId)) return; // Already notified, don't allow spam
     setNotifyingLate(appointmentId);
     setConflictError(null);
     try {
       await notifyRunningLate(appointmentId);
+      // Mark as notified on success
+      setNotifiedAppointments(prev => new Set(prev).add(appointmentId));
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (err) {
@@ -844,28 +849,41 @@ export default function ProviderDashboard() {
       const appointmentId = editingAppointment.id;
       
       if (!isPast && !isInProg) {
-        await patchAppointment(appointmentId, {
-          status: "cancelled",
-          notes: editFormData.notes || undefined,
-          reason: editFormData.cancel_reason || undefined,
-        });
+        // Use dedicated cancel endpoint for upcoming appointments
+        await cancelAppointment(appointmentId, editFormData.cancel_reason || undefined);
+        // Update notes separately if provided (cancel endpoint doesn't handle notes)
+        if (editFormData.notes) {
+          await patchAppointment(appointmentId, {
+            notes: editFormData.notes,
+          });
+        }
       } else if (isCanceled(editingAppointment)) {
-        // Past canceled: no status/time changes allowed
-        await patchAppointment(appointmentId, {
-          status: "cancelled",
-          notes: editFormData.notes || undefined,
-        });
+        // Past canceled: no status/time changes allowed, only notes can be updated
+        if (editFormData.notes) {
+          await patchAppointment(appointmentId, {
+            notes: editFormData.notes,
+          });
+        }
       } else {
         // For completed/no_show, use the complete endpoint
         if (editFormData.status === "completed" || editFormData.status === "no_show") {
           // Use the mark_completed endpoint for these statuses
           const { markAppointmentComplete } = await import("../../salon-reg/api.js");
           await markAppointmentComplete(appointmentId, editFormData.status);
+        } else if (editFormData.status === "cancelled") {
+          // Use dedicated cancel endpoint for cancellation
+          await cancelAppointment(appointmentId, editFormData.cancel_reason || undefined);
+          // Update notes separately if provided
+          if (editFormData.notes) {
+            await patchAppointment(appointmentId, {
+              notes: editFormData.notes,
+            });
+          }
         } else {
+          // For other status changes, use the generic update endpoint
           await patchAppointment(appointmentId, {
             status: editFormData.status,
             notes: editFormData.notes || undefined,
-            reason: editFormData.status === "cancelled" ? editFormData.cancel_reason || undefined : undefined,
           });
         }
       }
@@ -1463,9 +1481,6 @@ export default function ProviderDashboard() {
         </div>
       )}
 
-      <button className="fixed bottom-6 right-6 w-12 h-12 bg-gray-900 text-white rounded-full shadow-lg hover:bg-gray-800 flex items-center justify-center">
-        ?
-      </button>
     </div>
   );
 }

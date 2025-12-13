@@ -60,21 +60,23 @@ export default function RescheduleModal({ appt, onClose, onSuccess }) {
             </div>
             <div className="flex-1">
               <div className="text-sm text-gray-600 mb-2">Available Time Slots</div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {slots.map((s) => (
-                  <button
-                    key={s.start_at}
-                    onClick={() => setSlot(s)}
-                    className={`rounded-xl border px-4 py-2 text-sm ${
-                      slot?.start_at === s.start_at ? "ring-2 ring-violet-600 border-violet-600" : "hover:bg-gray-50"
-                    }`}
-                  >
-                    {s.label || formatTimeInTz(s.start_at, s.timezone || appt.salon?.timezone || "America/New_York")}
-                  </button>
-                ))}
-                {slots.length === 0 && (
-                  <div className="text-sm text-gray-500 col-span-full">No openings for this day.</div>
-                )}
+              <div className="max-h-[400px] overflow-y-auto pr-2">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {slots.map((s) => (
+                    <button
+                      key={s.start_at}
+                      onClick={() => setSlot(s)}
+                      className={`rounded-xl border px-4 py-2 text-sm ${
+                        slot?.start_at === s.start_at ? "ring-2 ring-violet-600 border-violet-600" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      {s.label || formatTimeInTz(s.start_at, s.timezone || appt.salon?.timezone || "America/New_York")}
+                    </button>
+                  ))}
+                  {slots.length === 0 && (
+                    <div className="text-sm text-gray-500 col-span-full">No openings for this day.</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

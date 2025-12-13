@@ -350,7 +350,15 @@ export default function Appointments() {
     setPastPage(1);
   };
 
-  const reloadCurrentTab = useCallback(async () => {
+  const reloadCurrentTab = useCallback(async (cancelledAppointmentId = null) => {
+    // If an appointment was just cancelled, immediately remove it from local state
+    if (cancelledAppointmentId) {
+      setUpcomingAppts(prev => prev.filter(a => a.id !== cancelledAppointmentId));
+      setInprogressAppts(prev => prev.filter(a => a.id !== cancelledAppointmentId));
+      setUpcomingCount(prev => Math.max(0, prev - 1));
+      setInprogressCount(prev => Math.max(0, prev - 1));
+    }
+    
     if (tab === "upcoming") {
       await loadCounts();
     } else if (tab === "inprogress") {
@@ -541,7 +549,14 @@ export default function Appointments() {
         <CancelModal
           appt={cancelAppt}
           onClose={() => setCancelAppt(null)}
-          onSuccess={reloadCurrentTab}
+          onSuccess={(res) => {
+            const cancelledId = cancelAppt?.id;
+            setCancelAppt(null);
+            reloadCurrentTab(cancelledId);
+            // Also reload cancelled tab to show the newly cancelled appointment
+            loadCancelled(1, false);
+            loadCounts(); // Refresh counts
+          }}
         />
       )}
     </div>
